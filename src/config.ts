@@ -65,40 +65,13 @@ export type FreeRouterConfig = {
 const DEFAULT_CONFIG: FreeRouterConfig = {
   port: 18800,
   host: "127.0.0.1",
-  providers: {
-    anthropic: {
-      baseUrl: "https://api.anthropic.com",
-      api: "anthropic",
-    },
-    "kimi-coding": {
-      baseUrl: "https://api.kimi.com/coding/v1",
-      api: "openai",
-      headers: { "User-Agent": "KimiCLI/0.77" },
-    },
-  },
-  tiers: {
-    SIMPLE:    { primary: "kimi-coding/kimi-for-coding", fallback: ["anthropic/claude-haiku-4-5"] },
-    MEDIUM:    { primary: "anthropic/claude-sonnet-4-5", fallback: ["anthropic/claude-opus-4-6"] },
-    COMPLEX:   { primary: "anthropic/claude-opus-4-6", fallback: ["anthropic/claude-haiku-4-5"] },
-    REASONING: { primary: "anthropic/claude-opus-4-6", fallback: ["anthropic/claude-haiku-4-5"] },
-  },
-  agenticTiers: {
-    SIMPLE:    { primary: "kimi-coding/kimi-for-coding", fallback: ["anthropic/claude-haiku-4-5"] },
-    MEDIUM:    { primary: "anthropic/claude-sonnet-4-5", fallback: ["anthropic/claude-opus-4-6"] },
-    COMPLEX:   { primary: "anthropic/claude-opus-4-6", fallback: ["anthropic/claude-haiku-4-5"] },
-    REASONING: { primary: "anthropic/claude-opus-4-6", fallback: ["anthropic/claude-haiku-4-5"] },
-  },
-  thinking: {
-    adaptive: ["claude-opus-4-6", "claude-opus-4.6"],
-    enabled: { models: ["claude-sonnet-4-5"], budget: 4096 },
-  },
+  providers: {},
+  tiers: {},
+  agenticTiers: {},
+  thinking: {},
   auth: {
-    default: "openclaw",
-    openclaw: {
-      type: "openclaw",
-      profilesPath: "~/.openclaw/agents/main/agent/auth-profiles.json",
-    },
-  },
+    default: "none"
+  }
 };
 
 // ─── Singleton ───
