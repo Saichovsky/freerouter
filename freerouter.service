@@ -1,0 +1,36 @@
+# /etc/systemd/system/freerouter.service
+[Unit]
+Description=FreeRouter LLM Proxy Server
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=freerouter
+Group=freerouter
+WorkingDirectory=/opt/freerouter
+EnvironmentFile=/opt/freerouter/.env
+Environment=FREEROUTER_CONFIG=/opt/freerouter/freemodels.config.json
+ExecStart=/usr/bin/node /opt/freerouter/dist/server.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=freerouter
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# ReadWritePaths=/opt/freerouter
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Resource limits (adjust as needed)
+LimitNOFILE=65536
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
