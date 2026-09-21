@@ -46,6 +46,7 @@ export type FreeRouterConfig = {
   host: string;
   providers: Record<string, ProviderConfigEntry>;
   tiers: Record<string, TierMapping>;
+  tierTimeouts?: Record<string, number>;
   agenticTiers?: Record<string, TierMapping>;
   tierBoundaries?: {
     simpleMedium: number;
