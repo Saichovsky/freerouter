@@ -8,7 +8,7 @@ import { getAuth } from "./auth.js";
 import { getConfig, toInternalApiType, supportsAdaptiveThinking as configSupportsAdaptive, getThinkingBudget } from "./config.js";
 import { logger } from "./logger.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
-// --- Timeout Configuration ---
+// --- Timeout Configuration --- (hardcoded defaults, overridden by config.tierTimeouts)
 const TIER_TIMEOUTS: Record<string, number> = {
   SIMPLE: 30_000,
   MEDIUM: 60_000,
@@ -19,6 +19,10 @@ const TIER_TIMEOUTS: Record<string, number> = {
 const STREAM_STALL_TIMEOUT = 30_000;
 
 function getTierTimeout(tier: string): number {
+  const cfg = getConfig();
+  if (cfg?.tierTimeouts) {
+    return cfg.tierTimeouts[tier] ?? TIER_TIMEOUTS[tier] ?? 60_000;
+  }
   return TIER_TIMEOUTS[tier] ?? 60_000;
 }
 
