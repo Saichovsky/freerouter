@@ -554,6 +554,8 @@ async function forwardToOpenAI(
   if (req.max_tokens) body.max_tokens = req.max_tokens;
   if (req.temperature !== undefined) body.temperature = req.temperature;
   if (req.top_p !== undefined) body.top_p = req.top_p;
+  if (req.tools && req.tools.length > 0) body.tools = req.tools;
+  if (req.tool_choice !== undefined) body.tool_choice = req.tool_choice;
 
   const url = `${config.baseUrl}/chat/completions`;
   logger.info(`-> ${provider}: ${modelName} (tier=${tier}, stream=${stream})`);
