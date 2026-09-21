@@ -130,7 +130,7 @@ export function classifyByRules(
   estimatedTokens: number,
   config: ScoringConfig,
 ): ScoringResult {
-  const text = `${systemPrompt ?? ""} ${prompt}`.toLowerCase();
+  const text = prompt.toLowerCase();
   const userText = prompt.toLowerCase();
 
   const dimensions: DimensionScore[] = [

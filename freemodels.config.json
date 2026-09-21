@@ -1,0 +1,138 @@
+{
+  "port": 18800,
+  "host": "127.0.0.1",
+  "auth": {
+    "default": "none"
+  },
+  "providers": {
+    "nvidia": {
+      "baseUrl": "https://integrate.api.nvidia.com/v1",
+      "api": "openai",
+      "auth": {
+        "type": "env",
+        "key": "NVIDIA_API_KEY"
+      }
+    },
+    "poolside": {
+      "baseUrl": "https://inference.poolside.ai/v1",
+      "api": "openai",
+      "auth": {
+        "type": "env",
+        "key": "POOLSIDE_API_KEY"
+      }
+    },
+    "zai": {
+      "baseUrl": "https://api.z.ai/api/paas/v4",
+      "api": "openai",
+      "auth": {
+        "type": "env",
+        "key": "ZAI_API_KEY"
+      }
+    },
+    "openrouter": {
+      "baseUrl": "https://openrouter.ai/api/v1",
+      "api": "openai",
+      "auth": {
+        "type": "env",
+        "key": "OPENROUTER_API_KEY"
+      }
+    },
+    "groq": {
+      "baseUrl": "https://api.groq.com/openai/v1",
+      "api": "openai",
+      "auth": {
+        "type": "env",
+        "key": "GROQ_API_KEY"
+      }
+    },
+    "cerebras": {
+      "baseUrl": "https://api.cerebras.ai/v1",
+      "api": "openai",
+      "auth": {
+        "type": "env",
+        "key": "CEREBRAS_API_KEY"
+      }
+    }
+  },
+  "tierTimeouts": {
+    "SIMPLE": 30000,
+    "MEDIUM": 60000,
+    "COMPLEX": 90000,
+    "REASONING": 120000,
+    "EXPLICIT": 120000
+  },
+  "apiKeys": {},
+  "tiers": {
+    "SIMPLE": {
+      "primary": "poolside/poolside/laguna-xs-2.1",
+      "fallback": [
+        "poolside/poolside/laguna-s-2.1",
+        "groq/llama-3.3-70b-versatile",
+        "cerebras/gemma-4-31b"
+      ]
+    },
+    "MEDIUM": {
+      "primary": "poolside/poolside/laguna-s-2.1",
+      "fallback": [
+        "groq/openai/gpt-oss-20b",
+        "cerebras/gpt-oss-120b",
+        "poolside/poolside/laguna-s-2.1"
+      ]
+    },
+    "COMPLEX": {
+      "primary": "groq/openai/gpt-oss-120b",
+      "fallback": [
+        "cerebras/gpt-oss-120b",
+        "poolside/poolside/laguna-s-2.1",
+        "groq/llama-3.3-70b-versatile"
+      ]
+    },
+    "REASONING": {
+      "primary": "groq/openai/gpt-oss-120b",
+      "fallback": [
+        "cerebras/gpt-oss-120b",
+        "poolside/poolside/laguna-s-2.1",
+        "openrouter/nvidia/nemotron-3-super-120b-a12b:free"
+      ]
+    }
+  },
+  "agenticTiers": {
+    "SIMPLE": {
+      "primary": "poolside/poolside/laguna-xs-2.1",
+      "fallback": [
+        "poolside/poolside/laguna-s-2.1",
+        "groq/llama-3.3-70b-versatile",
+        "cerebras/gemma-4-31b"
+      ]
+    },
+    "MEDIUM": {
+      "primary": "poolside/poolside/laguna-s-2.1",
+      "fallback": [
+        "groq/openai/gpt-oss-20b",
+        "cerebras/gpt-oss-120b",
+        "poolside/poolside/laguna-s-2.1"
+      ]
+    },
+    "COMPLEX": {
+      "primary": "groq/openai/gpt-oss-120b",
+      "fallback": [
+        "cerebras/gpt-oss-120b",
+        "poolside/poolside/laguna-s-2.1",
+        "groq/llama-3.3-70b-versatile"
+      ]
+    },
+    "REASONING": {
+      "primary": "groq/openai/gpt-oss-120b",
+      "fallback": [
+        "cerebras/gpt-oss-120b",
+        "poolside/poolside/laguna-s-2.1",
+        "openrouter/nvidia/nemotron-3-super-120b-a12b:free"
+      ]
+    },
+    "tierBoundaries": {
+      "simpleMedium": 0.05,
+      "mediumComplex": 0.25,
+      "complexReasoning": 0.5
+    }
+  }
+}
