@@ -150,13 +150,40 @@ If no config file exists, built-in defaults apply.
     "COMPLEX":   { "primary": "local-ollama/qwen3.6:27b-fast",        "fallback": ["local-ollama/qwen3-coder:30b-fast"] },
     "REASONING": { "primary": "local-ollama/qwen3-coder:30b-fast",    "fallback": ["local-ollama/qwen3.6:27b-fast"] }
   },
-  "tierBoundaries": { "simpleMedium": 0.05, "mediumComplex": 0.25, "complexReasoning": 0.50 }
+  "tierBoundaries": { "simpleMedium": 0.05, "mediumComplex": 0.25, "complexReasoning": 0.50 },
+  "agenticTiers": {
+    "SIMPLE":    { "primary": "local-ollama/qwen2.5-coder:1.5b-fast" },
+    "MEDIUM":    { "primary": "local-ollama/qwen2.5-coder:7b-fast" },
+    "COMPLEX":   { "primary": "local-ollama/qwen3-coder:30b-fast" },
+    "REASONING": { "primary": "local-ollama/qwen3.6:27b-fast" }
+  },
+  "thinking": {
+    "adaptive": ["qwen3.6:27b-fast", "qwen3.8:27b-fast", "qwen3-coder:30b-fast"],
+    "enabled": { "models": ["qwen3.6:27b-fast", "qwen3-coder:30b-fast"], "budget": 4096 }
+  }
 }
 ```
+
+`agenticTiers` (same shape as `tiers`) takes over when a request scores as an agentic task. `thinking.adaptive` lists models that receive `thinking: { type: "adaptive" }` on COMPLEX/REASONING tiers; `thinking.enabled` lists models that get a thinking budget (in tokens) on MEDIUM.
 
 Provider `api` is `"anthropic"` (Messages API) or `"openai"` (OpenAI-compatible). Auth can come from OpenClaw `auth-profiles.json`, an env var (`"auth": { "type": "env", "key": "VAR_NAME" }`), and more — see `src/auth.ts` and `docs/configuration.md`.
 
 Reload without restart: `curl http://localhost:18800/reload-config`
+
+## Testing
+
+```bash
+npm test   # 37 tests, zero extra dependencies (node:test + tsx)
+```
+
+| File | What it covers |
+|------|---------------|
+| `test/router.test.ts` | Tier classification, structured-output upgrade, cost math, fallback chains |
+| `test/metrics.test.ts` | Prometheus recording helpers against the real registry |
+| `test/thinking.test.ts` | Thinking-config resolution, fixture-driven (listed/unlisted models, opus fallback) |
+| `test/server.test.ts` | Black-box HTTP: boots the real server against a dead backend, asserts endpoints, routing headers, mode overrides, and metrics |
+
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, build, then the suite on every PR to `master`.
 
 ## OpenClaw Integration
 
