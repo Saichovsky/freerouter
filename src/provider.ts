@@ -1,7 +1,7 @@
 /**
- * ClawRouter Provider â€” handles forwarding to backend APIs
+ * ClawRouter Provider — handles forwarding to backend APIs
  * Supports: Anthropic Messages API, OpenAI-compatible (Kimi, OpenAI)
- * Zero external deps â€” uses native fetch + streams.
+ * Zero external deps — uses native fetch + streams.
  */
 
 import { getAuth } from "./auth.js";

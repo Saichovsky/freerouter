@@ -1,6 +1,6 @@
 {
   "name": "freerouter",
-  "version": "1.0.0",
+  "version": "1.4.0",
   "description": "Free, self-hosted AI model router — smart routing with your own API keys (OpenRouter alternative)",
   "type": "module",
   "main": "src/index.ts",

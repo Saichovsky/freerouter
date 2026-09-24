@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.4.0] — 2026-09-24
+
+### 📊 Prometheus Metrics
+
+- **New `GET /metrics` endpoint** — token counts, request counts/errors, latency histogram, cost estimates, and fallback counts per model/provider (+ `prom-client` dependency)
+- Token usage captured from provider `usage` in both streaming and non-streaming paths
+- README gains a Monitoring section with scrape config and a full metric table
+
+### 🧠 Thinking Config Wired Up
+
+- `thinking.adaptive` / `thinking.enabled` in `freerouter.config.json` are now honored (previously silently ignored); built-in opus defaults apply when unset
+- 8 new fixture-driven tests pin listed/unlisted-model behavior and the opus fallback
+
+### 🧹 Dead Code Removed
+
+- `getAuthHeader()`, `ClassifierConfig` type + `version`/`classifier` config surface, `resolvePath()`/`resolveEnvVars()`, unused imports
+
+### ✅ CI + Test Suite
+
+- **37/37 tests passing** via `npm test` (`test/router`, `test/metrics`, `test/thinking`, `test/server` — node:test + tsx, zero new deps)
+- CI runs lint, typecheck, build, test on PRs; docs-only PRs skip CI
+- Prettier check removed; eslint deps pinned (`eslint`, `@eslint/js`, `typescript-eslint`)
+
+### Fixed
+
+- `/health` version now matches release (`1.4.0`)
+- UTF-8 mojibake in `src/provider.ts` file header
+- `npm start` path corrected to `dist/server.js`
+
+---
+
 ## [1.3.0] — 2026-02-14
 
 ### 🎛️ Mode Overrides — Take Control When You Want It
