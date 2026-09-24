@@ -8,7 +8,7 @@
     "start": "node dist/src/server.js",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --import tsx test/router.test.ts test/metrics.test.ts test/server.test.ts"
+    "test": "node --test --import tsx test/router.test.ts test/metrics.test.ts test/server.test.ts test/thinking.test.ts"
   },
   "license": "MIT",
   "devDependencies": {
