@@ -5,7 +5,12 @@
  */
 
 import { getAuth } from "./auth.js";
-import { getConfig, toInternalApiType } from "./config.js";
+import {
+  getConfig,
+  toInternalApiType,
+  supportsAdaptiveThinking as configSupportsAdaptiveThinking,
+  getThinkingBudget,
+} from "./config.js";
 import { logger } from "./logger.js";
 import type { ServerResponse } from "node:http";
 // --- Timeout Configuration --- (hardcoded defaults, overridden by config.tierTimeouts)
@@ -111,21 +116,17 @@ export function parseModelId(modelId: string): { provider: string; model: string
 }
 
 /**
- * Check if a model supports adaptive thinking (Opus 4.6+)
- */
-function supportsAdaptiveThinking(modelId: string): boolean {
-  return modelId.includes("opus-4-6") || modelId.includes("opus-4.6");
-}
-
-/**
  * Get thinking config based on tier and model.
+ * Adaptive list and enabled budget come from `thinking` in
+ * freerouter.config.json; built-in opus defaults apply when unset.
  */
-function getThinkingConfig(tier: string, modelId: string): { type: string; budget_tokens?: number; effort?: string } | undefined {
-  if (supportsAdaptiveThinking(modelId) && (tier === "COMPLEX" || tier === "REASONING")) {
+export function getThinkingConfig(tier: string, modelId: string): { type: string; budget_tokens?: number; effort?: string } | undefined {
+  if (configSupportsAdaptiveThinking(modelId) && (tier === "COMPLEX" || tier === "REASONING")) {
     return { type: "adaptive" };
   }
-  if (tier === "MEDIUM") {
-    return { type: "enabled", budget_tokens: 4096 };
+  const budget = getThinkingBudget(modelId);
+  if (tier === "MEDIUM" && budget !== null) {
+    return { type: "enabled", budget_tokens: budget };
   }
   return undefined;
 }
