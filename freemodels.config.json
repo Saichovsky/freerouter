@@ -75,8 +75,7 @@
       "primary": "poolside/poolside/laguna-s-2.1",
       "fallback": [
         "groq/openai/gpt-oss-20b",
-        "cerebras/gpt-oss-120b",
-        "poolside/poolside/laguna-s-2.1"
+        "cerebras/gpt-oss-120b"
       ]
     },
     "COMPLEX": {
@@ -109,8 +108,7 @@
       "primary": "poolside/poolside/laguna-s-2.1",
       "fallback": [
         "groq/openai/gpt-oss-20b",
-        "cerebras/gpt-oss-120b",
-        "poolside/poolside/laguna-s-2.1"
+        "cerebras/gpt-oss-120b"
       ]
     },
     "COMPLEX": {
@@ -128,11 +126,15 @@
         "poolside/poolside/laguna-s-2.1",
         "openrouter/nvidia/nemotron-3-super-120b-a12b:free"
       ]
-    },
-    "tierBoundaries": {
-      "simpleMedium": 0.05,
-      "mediumComplex": 0.25,
-      "complexReasoning": 0.5
     }
+  },
+  "tierBoundaries": {
+    "simpleMedium": 0.05,
+    "mediumComplex": 0.25,
+    "complexReasoning": 0.5
+  },
+  "thinking": {
+    "adaptive": ["qwen3.6:27b-fast", "qwen3.8:27b-fast", "qwen3-coder:30b-fast"],
+    "enabled": { "models": ["qwen3.6:27b-fast", "qwen3-coder:30b-fast"], "budget": 4096 }
   }
 }
