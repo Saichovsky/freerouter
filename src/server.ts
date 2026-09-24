@@ -16,7 +16,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { route } from "./router/index.js";
 import { getRoutingConfig } from "./router/config.js";
 import { buildPricingMap } from "./models.js";
-import { forwardRequest, TimeoutError, type ChatRequest, type ForwardResult, parseModelId } from "./provider.js";
+import { forwardRequest, TimeoutError, type ChatRequest, parseModelId } from "./provider.js";
 import { reloadAuth } from "./auth.js";
 import { loadConfig, getConfig, reloadConfig, getSanitizedConfig, getConfigPath } from "./config.js";
 import { logger, setLogLevel } from "./logger.js";
@@ -277,7 +277,6 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse) 
   }
 
   let lastError: string = "";
-  let forwardResult: ForwardResult | null = null;
   for (const modelToTry of modelsToTry) {
     try {
       if (modelToTry !== routedModel) {
@@ -285,7 +284,7 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse) 
         logger.info(`[${stats.requests}] Falling back to ${modelToTry}`);
         res.setHeader("X-ClawRouter-Model", modelToTry);
       }
-      forwardResult = await forwardRequest(chatReq, modelToTry, tier, res, stream);
+      const forwardResult = await forwardRequest(chatReq, modelToTry, tier, res, stream);
       const provider = parseModelId(modelToTry).provider;
       recordTokens(modelToTry, provider, forwardResult.inputTokens, forwardResult.outputTokens);
       const durationSec = (Date.now() - startTime) / 1000;
