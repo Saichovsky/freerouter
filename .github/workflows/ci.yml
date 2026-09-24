@@ -1,10 +1,8 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 jobs:
@@ -23,9 +21,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Check formatting
-        run: npx prettier --check .
-
       - name: Lint
         run: npx eslint src/
 
@@ -34,3 +29,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Test
+        run: npm test

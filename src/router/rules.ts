@@ -131,7 +131,6 @@ export function classifyByRules(
   config: ScoringConfig,
 ): ScoringResult {
   const text = prompt.toLowerCase();
-  const userText = prompt.toLowerCase();
 
   const dimensions: DimensionScore[] = [
     scoreTokenCount(estimatedTokens, config.tokenCountThresholds),
@@ -144,7 +143,7 @@ export function classifyByRules(
       { none: 0, low: 0.5, high: 1.0 },
     ),
     scoreKeywordMatch(
-      userText,
+      text,
       config.reasoningKeywords,
       "reasoningMarkers",
       "reasoning",
@@ -242,7 +241,7 @@ export function classifyByRules(
   }
 
   const reasoningMatches = config.reasoningKeywords.filter((kw) =>
-    userText.includes(kw.toLowerCase()),
+    text.includes(kw.toLowerCase()),
   );
 
   // Direct reasoning override: 2+ reasoning markers = high confidence REASONING

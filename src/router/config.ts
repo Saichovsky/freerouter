@@ -16,16 +16,6 @@ import type { RoutingConfig } from "./types.js";
 import { getConfig } from "../config.js";
 
 export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
-  version: "2.0-direct",
-
-  classifier: {
-    llmModel: "kimi-coding/kimi-for-coding", // cheapest for classification fallback
-    llmMaxTokens: 10,
-    llmTemperature: 0,
-    promptTruncationChars: 500,
-    cacheTtlMs: 3_600_000,
-  },
-
   scoring: {
     tokenCountThresholds: { simple: 5, complex: 40 },
 

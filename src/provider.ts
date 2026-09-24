@@ -5,9 +5,9 @@
  */
 
 import { getAuth } from "./auth.js";
-import { getConfig, toInternalApiType, supportsAdaptiveThinking as configSupportsAdaptive, getThinkingBudget } from "./config.js";
+import { getConfig, toInternalApiType } from "./config.js";
 import { logger } from "./logger.js";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type { ServerResponse } from "node:http";
 // --- Timeout Configuration --- (hardcoded defaults, overridden by config.tierTimeouts)
 const TIER_TIMEOUTS: Record<string, number> = {
   SIMPLE: 30_000,
@@ -202,7 +202,7 @@ function convertMessagesToAnthropic(
       }
       // Add tool_use blocks
       for (const tc of msg.tool_calls) {
-        let input: unknown = {};
+        let input: unknown;
         try { input = JSON.parse(tc.function.arguments); } catch { input = {}; }
         contentBlocks.push({ type: "tool_use", id: tc.id, name: tc.function.name, input });
       }
@@ -292,7 +292,7 @@ async function forwardToAnthropic(
     const systemBlocks: Array<{ type: string; text: string; cache_control?: { type: string } }> = [
       {
         type: "text",
-        text: "You are Claude Code, Anthropic\'s official CLI for Claude.",
+        text: "You are Claude Code, Anthropic's official CLI for Claude.",
         cache_control: { type: "ephemeral" },
       },
     ];
@@ -396,8 +396,8 @@ async function forwardToAnthropic(
     };
     if (toolCalls.length > 0) message.tool_calls = toolCalls;
 
-    let inputTokens = data.usage?.input_tokens ?? 0;
-    let outputTokens = data.usage?.output_tokens ?? 0;
+    const inputTokens = data.usage?.input_tokens ?? 0;
+    const outputTokens = data.usage?.output_tokens ?? 0;
 
     const openaiResponse = {
       id: `chatcmpl-${Date.now()}`,

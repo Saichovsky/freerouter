@@ -81,25 +81,6 @@ let _config: FreeRouterConfig | null = null;
 let _configPath: string | null = null;
 
 /**
- * Resolve ~ to home directory in paths.
- */
-function resolvePath(p: string): string {
-  if (p.startsWith("~/") || p === "~") {
-    return join(homedir(), p.slice(1));
-  }
-  return p;
-}
-
-/**
- * Resolve $ENV_VAR references in string values.
- */
-function resolveEnvVars(value: string): string {
-  return value.replace(/\$([A-Z_][A-Z0-9_]*)/g, (_match, name) => {
-    return process.env[name] ?? "";
-  });
-}
-
-/**
  * Deep-merge source into target (source wins). Arrays are replaced, not merged.
  */
 function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): Record<string, unknown> {

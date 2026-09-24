@@ -8,13 +8,16 @@
     "start": "node dist/src/server.js",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "npx tsx test/test-router.ts"
+    "test": "node --test --import tsx test/router.test.ts test/metrics.test.ts test/server.test.ts"
   },
   "license": "MIT",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^25.2.3",
+    "eslint": "^10.11.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.70.1"
   },
   "dependencies": {
     "prom-client": "^15.1.3"
