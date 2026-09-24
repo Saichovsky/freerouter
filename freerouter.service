@@ -10,8 +10,9 @@ User=freerouter
 Group=freerouter
 WorkingDirectory=/opt/freerouter
 EnvironmentFile=/opt/freerouter/.env
-Environment=FREEROUTER_CONFIG=/opt/freerouter/freemodels.config.json
 ExecStart=/usr/bin/node /opt/freerouter/dist/server.js
+ExecReload=/usr/bin/curl --fail --silent --show-error \
+  --request POST http://127.0.0.1:18800/reload-config
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
