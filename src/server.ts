@@ -367,7 +367,7 @@ function handleHealth(_req: IncomingMessage, res: ServerResponse) {
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify({
     status: "ok",
-    version: "1.1.0",
+    version: "1.4.0",
     uptime: process.uptime(),
     stats,
   }));

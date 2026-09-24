@@ -32,7 +32,7 @@ describe("metrics", () => {
   });
 
   it("recordRequest counts by tier/model/status and observes duration", async () => {
-    const labels = { tier: "SIMPLE", model: "test-model-req", status: "success" };
+    const labels = { tier: "SIMPLE", model: "test-model-req", status: "success" as const };
     recordRequest({ ...labels, durationSec: 1.5 });
 
     const total = withLabels(await samples("freerouter_requests_total"), labels);
