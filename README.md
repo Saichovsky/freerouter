@@ -6,9 +6,7 @@
 
 **Stop overpaying for AI. Route every request to the right model — automatically, with your own API keys. No middleman, no markup.**
 
-[![OpenClaw](https://img.shields.io/badge/Built%20for-OpenClaw-blue)](https://github.com/openclaw/openclaw)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-75%2F75-brightgreen)](tests/)
 
 ---
 
@@ -33,19 +31,19 @@
 - **Request timeouts** — per-tier timeouts with automatic fallback to secondary model
 - **Tool call translation** — bidirectional Anthropic ↔ OpenAI format translation
 - **OpenAI-compatible API** — drop-in replacement; works with any client that speaks `/v1/chat/completions`
-- **75/75 test suite** — core routing, streaming, tool calls, unicode, concurrency, mode overrides
+- **Prometheus metrics** — `GET /metrics` exposes token usage, request counts, latency, cost estimates, and errors per model
 
 ## How It Works
 
 ```
-Your App → FreeRouter (:18800) → Classifier → Best Model
-                                    ├── SIMPLE    → Kimi K2.5     (near-zero cost)
-                                    ├── MEDIUM    → Sonnet 4.5    (balanced)
-                                    ├── COMPLEX   → Opus 4.6      (powerful)
-                                    └── REASONING → Opus 4.6      (max thinking)
+Your App → FreeRouter (:18800) → Classifier → Best Model (per freerouter.config.json)
+                                    ├── SIMPLE    → qwen2.5-coder:1.5b  (near-zero cost)
+                                    ├── MEDIUM    → qwen2.5-coder:7b    (balanced)
+                                    ├── COMPLEX   → qwen3.6:27b         (powerful)
+                                    └── REASONING → qwen3-coder:30b     (max thinking)
 ```
 
-The classifier scores each message on 14 dimensions (vocabulary complexity, reasoning depth, code complexity, domain specificity, etc.) and routes to the cheapest model that can handle it. Context-aware — includes last 3 messages in scoring.
+The classifier scores each message on 14 dimensions (vocabulary complexity, reasoning depth, code complexity, domain specificity, etc.) and routes to the cheapest model that can handle it. Context-aware — includes last 3 messages in scoring. Tier → model mappings are fully configurable (the diagram above shows the shipped `freerouter.config.json`, which targets local Ollama models).
 
 ## Mode Overrides *(v1.3.0)*
 
@@ -86,10 +84,10 @@ The prefix is **stripped** before forwarding — the LLM never sees it. When no 
 ### 1. Clone & Build
 
 ```bash
-git clone https://github.com/openfreerouter/freerouter.git
+git clone https://github.com/Saichovsky/freerouter.git
 cd freerouter
 npm install
-npx tsc
+npm run build
 ```
 
 ### 2. Configure
@@ -106,7 +104,7 @@ Or set API keys via environment variables. See [Configuration](#configuration) b
 ### 3. Run
 
 ```bash
-node dist/src/server.js
+node dist/server.js
 # Listening on http://localhost:18800
 ```
 
@@ -137,18 +135,26 @@ If no config file exists, built-in defaults apply.
 
 ```json
 {
+  "port": 18800,
+  "host": "127.0.0.1",
   "providers": {
-    "anthropic": { "baseUrl": "https://api.anthropic.com", "api": "anthropic" },
-    "kimi": { "baseUrl": "https://api.moonshot.cn", "api": "openai" }
+    "local-ollama": {
+      "baseUrl": "http://127.0.0.1:11434/v1",
+      "api": "openai",
+      "auth": { "type": "env", "key": "OPENAI_API_KEY" }
+    }
   },
   "tiers": {
-    "SIMPLE": { "model": "kimi-for-coding", "provider": "kimi", "fallback": "claude-haiku-4-5-20250315" },
-    "MEDIUM": { "model": "claude-sonnet-4-5-20250514", "provider": "anthropic" },
-    "COMPLEX": { "model": "claude-opus-4-0-20250115", "provider": "anthropic" },
-    "REASONING": { "model": "claude-opus-4-0-20250115", "provider": "anthropic" }
-  }
+    "SIMPLE":    { "primary": "local-ollama/qwen2.5-coder:1.5b-fast", "fallback": ["local-ollama/qwen2.5-coder:7b-fast"] },
+    "MEDIUM":    { "primary": "local-ollama/qwen2.5-coder:7b-fast",   "fallback": ["local-ollama/qwen3.6:27b-fast"] },
+    "COMPLEX":   { "primary": "local-ollama/qwen3.6:27b-fast",        "fallback": ["local-ollama/qwen3-coder:30b-fast"] },
+    "REASONING": { "primary": "local-ollama/qwen3-coder:30b-fast",    "fallback": ["local-ollama/qwen3.6:27b-fast"] }
+  },
+  "tierBoundaries": { "simpleMedium": 0.05, "mediumComplex": 0.25, "complexReasoning": 0.50 }
 }
 ```
+
+Provider `api` is `"anthropic"` (Messages API) or `"openai"` (OpenAI-compatible). Auth can come from OpenClaw `auth-profiles.json`, an env var (`"auth": { "type": "env", "key": "VAR_NAME" }`), and more — see `src/auth.ts` and `docs/configuration.md`.
 
 Reload without restart: `curl http://localhost:18800/reload-config`
 
@@ -176,12 +182,38 @@ Add to your `openclaw.json`:
 | Endpoint | Description |
 |----------|-------------|
 | `POST /v1/chat/completions` | Main chat endpoint (OpenAI-compatible) |
-| `GET /health` | Health check with uptime and timeout count |
-| `GET /stats` | Request statistics by tier |
+| `GET /health` | Health check with uptime and request stats |
+| `GET /stats` | Request statistics by tier and model |
+| `GET /metrics` | Prometheus metrics (token usage, latency, errors, cost) |
 | `GET /v1/models` | List available models |
 | `GET /config` | View current config (secrets redacted) |
 | `POST /reload` | Reload auth keys |
 | `POST /reload-config` | Reload config file |
+
+## Monitoring (Prometheus)
+
+`GET /metrics` exposes Prometheus-format metrics, plus standard Node.js runtime metrics. Scrape it directly or point Prometheus at it:
+
+```yaml
+scrape_configs:
+  - job_name: freerouter
+    static_configs:
+      - targets: ["localhost:18800"]
+```
+
+| Metric | Type | Labels | Notes |
+|--------|------|--------|-------|
+| `freerouter_requests_total` | Counter | `tier`, `model`, `status` | `status` is `success` or `error` |
+| `freerouter_errors_total` | Counter | `type` | `parse_error`, `bad_request`, `upstream_error`, … |
+| `freerouter_timeouts_total` | Counter | `model` | Upstream timeouts (triggers fallback) |
+| `freerouter_tokens_input_total` | Counter | `model`, `provider` | From provider `usage` in the response |
+| `freerouter_tokens_output_total` | Counter | `model`, `provider` | From provider `usage` in the response |
+| `freerouter_cost_estimate_usd` | Gauge | `model` | Routing-time estimate; `0` for models with no pricing in `src/models.ts` |
+| `freerouter_request_duration_seconds` | Histogram | `tier`, `model` | Buckets: 0.1s–120s |
+| `freerouter_fallbacks_total` | Counter | `from_model`, `to_model` | Each fallback hop |
+| `freerouter_up` | Gauge | — | Always `1` when serving |
+
+Streaming token counts are best-effort (not all providers report `usage` on streams); non-streaming counts are exact.
 
 ## The 14-Dimension Classifier
 
@@ -210,30 +242,34 @@ Scores are weighted and combined. Tier boundaries are configurable.
 
 | Scenario | Estimated Daily Cost |
 |----------|---------------------|
-| All Opus (no routing) | ~$50/day |
+| All top-tier (no routing) | ~$50/day |
 | With FreeRouter | ~$10-15/day |
 | **Savings** | **60-80%** |
 
-Most messages are simple. Those go to Kimi at near-zero cost. Only complex work hits Opus.
+Most messages are simple. Those route to the cheapest tier model. Only complex work hits the expensive models. (Illustrative hosted-API figures — the shipped config targets local Ollama models, where inference cost is compute rather than per-token spend. Per-model pricing lives in `src/models.ts` and feeds the `freerouter_cost_estimate_usd` metric.)
 
 ## Project Structure
 
 ```
 freerouter/
 ├── src/
-│   ├── server.ts          # HTTP server + mode override detection
-│   ├── provider.ts        # Multi-provider forwarding + SSE translation
-│   ├── auth.ts            # API key management
+│   ├── server.ts          # HTTP server + mode override detection + metrics recording
+│   ├── provider.ts        # Multi-provider forwarding + SSE translation + token capture
+│   ├── metrics.ts         # Prometheus metrics (prom-client registry + helpers)
+│   ├── auth.ts            # API key management (OpenClaw profiles, env, file)
 │   ├── config.ts          # External config loader
+│   ├── models.ts          # Model definitions + per-1M-token pricing
 │   ├── logger.ts          # Request logging
+│   ├── index.ts           # Library entry (router exports)
 │   └── router/
-│       ├── index.ts       # 14-dimension classifier
+│       ├── index.ts       # 14-dimension classifier entry
 │       ├── config.ts      # Tier mappings + scoring weights
-│       └── rules.ts       # Keyword-based overrides
-├── tests/
-│   ├── test-proxy.sh      # Core tests (33 + 5 mode override tests)
-│   └── test-proxy-extended.sh  # Extended tests (37)
-├── freerouter.config.json # Example config
+│       ├── rules.ts       # Keyword-based scoring rules
+│       ├── selector.ts    # Tier → model selection + cost estimates
+│       └── types.ts       # Tier, RoutingDecision, config types
+├── docs/                  # Architecture, configuration, troubleshooting guides
+├── scripts/               # Install/uninstall helpers
+├── freerouter.config.json # Shipped config (local Ollama tiers)
 ├── tsconfig.json
 └── package.json
 ```
