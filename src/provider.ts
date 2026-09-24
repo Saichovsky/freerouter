@@ -80,6 +80,11 @@ export type ChatRequest = {
   tool_choice?: unknown;
 };
 
+export type ForwardResult = {
+  inputTokens: number;
+  outputTokens: number;
+};
+
 // Provider configs — loaded from freerouter.config.json via getProviderConfig()
 
 /**
@@ -255,7 +260,7 @@ async function forwardToAnthropic(
   tier: string,
   res: ServerResponse,
   stream: boolean,
-): Promise<void> {
+): Promise<ForwardResult> {
   const auth = getAuth("anthropic");
   if (!auth?.token) throw new Error("No Anthropic auth token");
 
@@ -391,6 +396,9 @@ async function forwardToAnthropic(
     };
     if (toolCalls.length > 0) message.tool_calls = toolCalls;
 
+    let inputTokens = data.usage?.input_tokens ?? 0;
+    let outputTokens = data.usage?.output_tokens ?? 0;
+
     const openaiResponse = {
       id: `chatcmpl-${Date.now()}`,
       object: "chat.completion",
@@ -398,15 +406,15 @@ async function forwardToAnthropic(
       model: `clawrouter/${modelName}`,
       choices: [{ index: 0, message, finish_reason: finishReason }],
       usage: {
-        prompt_tokens: data.usage?.input_tokens ?? 0,
-        completion_tokens: data.usage?.output_tokens ?? 0,
-        total_tokens: (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0),
+        prompt_tokens: inputTokens,
+        completion_tokens: outputTokens,
+        total_tokens: inputTokens + outputTokens,
       },
     };
 
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(openaiResponse));
-    return;
+    return { inputTokens, outputTokens };
   }
 
   // Streaming: convert Anthropic SSE to OpenAI SSE format
@@ -435,6 +443,9 @@ async function forwardToAnthropic(
     model: `clawrouter/${modelName}`,
     choices: [{ index: 0, delta, finish_reason: finish }],
   });
+
+  let streamInputTokens = 0;
+  let streamOutputTokens = 0;
 
   try {
     await readStreamWithStallDetection(reader, (value) => {
@@ -509,6 +520,14 @@ async function forwardToAnthropic(
           }
 
           if (event.type === "message_stop") {
+            // Try to extract usage from message_stop if present
+            const usage = event.usage;
+            if (usage?.input_tokens !== undefined) {
+              streamInputTokens = usage.input_tokens;
+            }
+            if (usage?.output_tokens !== undefined) {
+              streamOutputTokens = usage.output_tokens;
+            }
             const finish = stopReason === "tool_use" ? "tool_calls" : "stop";
             res.write(`data: ${JSON.stringify(makeChunk({}, finish))}\n\n`);
           }
@@ -526,6 +545,8 @@ async function forwardToAnthropic(
     res.write("data: [DONE]\n\n");
     res.end();
   }
+
+  return { inputTokens: streamInputTokens, outputTokens: streamOutputTokens };
 }
 
 /**
@@ -538,7 +559,7 @@ async function forwardToOpenAI(
   tier: string,
   res: ServerResponse,
   stream: boolean,
-): Promise<void> {
+): Promise<ForwardResult> {
   const auth = getAuth(provider);
   if (!auth?.apiKey) throw new Error(`No API key for ${provider}`);
 
@@ -599,9 +620,13 @@ async function forwardToOpenAI(
   if (!stream) {
     const data = await response.json() as Record<string, unknown>;
     if (data.model) data.model = `clawrouter/${modelName}`;
+    const usage = data.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(data));
-    return;
+    return {
+      inputTokens: usage?.prompt_tokens ?? 0,
+      outputTokens: usage?.completion_tokens ?? 0,
+    };
   }
 
   // Streaming: pass through SSE with model name rewrite
@@ -616,6 +641,8 @@ async function forwardToOpenAI(
 
   const decoder = new TextDecoder();
   let buffer = "";
+  let streamInputTokens = 0;
+  let streamOutputTokens = 0;
 
   try {
     await readStreamWithStallDetection(reader, (value) => {
@@ -632,6 +659,10 @@ async function forwardToOpenAI(
           }
           try {
             const chunk = JSON.parse(jsonStr);
+            if (chunk.usage) {
+              streamInputTokens = chunk.usage.prompt_tokens ?? streamInputTokens;
+              streamOutputTokens = chunk.usage.completion_tokens ?? streamOutputTokens;
+            }
             if (chunk.model) chunk.model = `clawrouter/${modelName}`;
             res.write(`data: ${JSON.stringify(chunk)}\n\n`);
           } catch {
@@ -655,6 +686,8 @@ async function forwardToOpenAI(
       res.end();
     }
   }
+
+  return { inputTokens: streamInputTokens, outputTokens: streamOutputTokens };
 }
 
 /**
@@ -666,7 +699,7 @@ export async function forwardRequest(
   tier: string,
   res: ServerResponse,
   stream: boolean,
-): Promise<void> {
+): Promise<ForwardResult> {
   const { provider, model } = parseModelId(routedModel);
 
   const providerConfig = getProviderConfig(provider);
@@ -675,8 +708,8 @@ export async function forwardRequest(
   }
 
   if (providerConfig.api === "anthropic-messages") {
-    await forwardToAnthropic(chatReq, model, tier, res, stream);
+    return await forwardToAnthropic(chatReq, model, tier, res, stream);
   } else {
-    await forwardToOpenAI(chatReq, provider, model, tier, res, stream);
+    return await forwardToOpenAI(chatReq, provider, model, tier, res, stream);
   }
 }

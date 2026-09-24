@@ -16,10 +16,20 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { route } from "./router/index.js";
 import { getRoutingConfig } from "./router/config.js";
 import { buildPricingMap } from "./models.js";
-import { forwardRequest, TimeoutError, type ChatRequest } from "./provider.js";
+import { forwardRequest, TimeoutError, type ChatRequest, type ForwardResult, parseModelId } from "./provider.js";
 import { reloadAuth } from "./auth.js";
 import { loadConfig, getConfig, reloadConfig, getSanitizedConfig, getConfigPath } from "./config.js";
 import { logger, setLogLevel } from "./logger.js";
+import {
+  register as metricsRegister,
+  setUp as setUpMetrics,
+  recordRequest,
+  recordError,
+  recordTimeout,
+  recordTokens,
+  recordCostEstimate,
+  recordFallback,
+} from "./metrics.js";
 
 // Load config at startup
 const appConfig = loadConfig();
@@ -28,6 +38,9 @@ const HOST = process.env.CLAWROUTER_HOST ?? appConfig.host ?? "127.0.0.1";
 
 // Build pricing map once at startup
 const modelPricing = buildPricingMap();
+
+// Initialize metrics
+setUpMetrics();
 
 // Stats
 const stats = {
@@ -174,14 +187,17 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse) 
   try {
     chatReq = JSON.parse(bodyStr);
   } catch {
+    recordError("parse_error");
     return sendError(res, 400, "Invalid JSON body");
   }
 
   if (!chatReq.model) {
+    recordError("bad_request");
     return sendError(res, 400, "model field is required");
   }
 
   if (!chatReq.messages || !Array.isArray(chatReq.messages) || chatReq.messages.length === 0) {
+    recordError("bad_request");
     return sendError(res, 400, "messages array is required");
   }
 
@@ -192,8 +208,11 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse) 
   const { prompt, systemPrompt } = extractPromptForClassification(chatReq.messages);
 
   if (!prompt) {
+    recordError("bad_request");
     return sendError(res, 400, "No user message found");
   }
+
+  const startTime = Date.now();
 
   // Route through classifier
   const requestedModel = chatReq.model ?? "auto";
@@ -224,6 +243,7 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse) 
       tier = decision.tier;
       reasoning = decision.reasoning;
 
+      recordCostEstimate(decision.model, decision.costEstimate);
       logger.info(`[${stats.requests + 1}] Classified: tier=${tier} model=${routedModel} confidence=${decision.confidence.toFixed(2)} | ${reasoning}`);
     }
   } else {
@@ -257,19 +277,27 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse) 
   }
 
   let lastError: string = "";
+  let forwardResult: ForwardResult | null = null;
   for (const modelToTry of modelsToTry) {
     try {
       if (modelToTry !== routedModel) {
+        recordFallback(routedModel, modelToTry);
         logger.info(`[${stats.requests}] Falling back to ${modelToTry}`);
         res.setHeader("X-ClawRouter-Model", modelToTry);
       }
-      await forwardRequest(chatReq, modelToTry, tier, res, stream);
+      forwardResult = await forwardRequest(chatReq, modelToTry, tier, res, stream);
+      const provider = parseModelId(modelToTry).provider;
+      recordTokens(modelToTry, provider, forwardResult.inputTokens, forwardResult.outputTokens);
+      const durationSec = (Date.now() - startTime) / 1000;
+      recordRequest({ tier, model: modelToTry, status: "success", durationSec });
       return; // success
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
       const isTimeout = err instanceof TimeoutError;
+      const currentModel = modelToTry;
       if (isTimeout) {
         stats.timeouts++;
+        recordTimeout(currentModel);
         logger.error(`\u23f1 TIMEOUT (${modelToTry}): ${lastError} — trying fallback...`);
       } else {
         logger.error(`Forward error (${modelToTry}): ${lastError}`);
@@ -279,6 +307,9 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse) 
   }
 
   stats.errors++;
+  recordError("upstream_error");
+  const durationSec = (Date.now() - startTime) / 1000;
+  recordRequest({ tier, model: routedModel, status: "error", durationSec });
   if (!res.headersSent) {
     sendError(res, 502, `Backend error: ${lastError}`, "upstream_error");
   } else if (!res.writableEnded) {
@@ -422,6 +453,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       handleConfig(req, res);
     } else if (method === "POST" && url === "/reload-config") {
       handleReloadConfig(req, res);
+    } else if (method === "GET" && url === "/metrics") {
+      res.writeHead(200, { "Content-Type": metricsRegister.contentType });
+      res.end(await metricsRegister.metrics());
     } else {
       sendError(res, 404, `Not found: ${method} ${url}`, "not_found");
     }
@@ -451,6 +485,7 @@ server.listen(PORT, HOST, () => {
   logger.info(`   POST /reload               — reload auth keys`);
   logger.info(`   GET  /config               — show config (sanitized)`);
   logger.info(`   POST /reload-config         — reload config + auth`);
+  logger.info(`   GET  /metrics               — Prometheus metrics`);
 });
 
 // Graceful shutdown
