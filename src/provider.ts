@@ -5,7 +5,7 @@
  */
 
 import { getAuth } from "./auth.js";
-import { getConfig, toInternalApiType, supportsAdaptiveThinking as configSupportsAdaptive, getThinkingBudget } from "./config.js";
+import { getConfig, toInternalApiType } from "./config.js";
 import { logger } from "./logger.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
 // --- Timeout Configuration --- (hardcoded defaults, overridden by config.tierTimeouts)

@@ -59,14 +59,6 @@ export type ScoringConfig = {
   confidenceThreshold: number;
 };
 
-export type ClassifierConfig = {
-  llmModel: string;
-  llmMaxTokens: number;
-  llmTemperature: number;
-  promptTruncationChars: number;
-  cacheTtlMs: number;
-};
-
 export type OverridesConfig = {
   maxTokensForceComplex: number;
   structuredOutputMinTier: Tier;
@@ -75,8 +67,6 @@ export type OverridesConfig = {
 };
 
 export type RoutingConfig = {
-  version: string;
-  classifier: ClassifierConfig;
   scoring: ScoringConfig;
   tiers: Record<Tier, TierConfig>;
   agenticTiers?: Record<Tier, TierConfig>;
