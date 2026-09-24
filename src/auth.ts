@@ -110,19 +110,3 @@ export function reloadAuth(): void {
   logger.info("Auth cache cleared, will reload on next access");
 }
 
-/**
- * Get the authorization header value for a provider.
- */
-export function getAuthHeader(provider: string): string | undefined {
-  const auth = getAuth(provider);
-  if (!auth) return undefined;
-
-  if (auth.token) {
-    // Anthropic uses x-api-key header, not Authorization
-    return auth.token;
-  }
-  if (auth.apiKey) {
-    return auth.apiKey;
-  }
-  return undefined;
-}
