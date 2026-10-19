@@ -1,6 +1,6 @@
 {
   "port": 18800,
-  "host": "127.0.0.1",
+  "host": "192.168.10.6",
   "auth": {
     "default": "none"
   },
@@ -44,14 +44,6 @@
         "type": "env",
         "key": "GROQ_API_KEY"
       }
-    },
-    "cerebras": {
-      "baseUrl": "https://api.cerebras.ai/v1",
-      "api": "openai",
-      "auth": {
-        "type": "env",
-        "key": "CEREBRAS_API_KEY"
-      }
     }
   },
   "tierTimeouts": {
@@ -67,21 +59,18 @@
       "primary": "poolside/poolside/laguna-xs-2.1",
       "fallback": [
         "poolside/poolside/laguna-s-2.1",
-        "groq/llama-3.3-70b-versatile",
-        "cerebras/gemma-4-31b"
+        "groq/llama-3.3-70b-versatile"
       ]
     },
     "MEDIUM": {
       "primary": "poolside/poolside/laguna-s-2.1",
       "fallback": [
-        "groq/openai/gpt-oss-20b",
-        "cerebras/gpt-oss-120b"
+        "groq/openai/gpt-oss-20b"
       ]
     },
     "COMPLEX": {
       "primary": "groq/openai/gpt-oss-120b",
       "fallback": [
-        "cerebras/gpt-oss-120b",
         "poolside/poolside/laguna-s-2.1",
         "groq/llama-3.3-70b-versatile"
       ]
@@ -89,7 +78,6 @@
     "REASONING": {
       "primary": "groq/openai/gpt-oss-120b",
       "fallback": [
-        "cerebras/gpt-oss-120b",
         "poolside/poolside/laguna-s-2.1",
         "openrouter/nvidia/nemotron-3-super-120b-a12b:free"
       ]
@@ -100,21 +88,18 @@
       "primary": "poolside/poolside/laguna-xs-2.1",
       "fallback": [
         "poolside/poolside/laguna-s-2.1",
-        "groq/llama-3.3-70b-versatile",
-        "cerebras/gemma-4-31b"
+        "groq/llama-3.3-70b-versatile"
       ]
     },
     "MEDIUM": {
       "primary": "poolside/poolside/laguna-s-2.1",
       "fallback": [
-        "groq/openai/gpt-oss-20b",
-        "cerebras/gpt-oss-120b"
+        "groq/openai/gpt-oss-20b"
       ]
     },
     "COMPLEX": {
       "primary": "groq/openai/gpt-oss-120b",
       "fallback": [
-        "cerebras/gpt-oss-120b",
         "poolside/poolside/laguna-s-2.1",
         "groq/llama-3.3-70b-versatile"
       ]
@@ -122,19 +107,26 @@
     "REASONING": {
       "primary": "groq/openai/gpt-oss-120b",
       "fallback": [
-        "cerebras/gpt-oss-120b",
         "poolside/poolside/laguna-s-2.1",
         "openrouter/nvidia/nemotron-3-super-120b-a12b:free"
       ]
     }
   },
   "tierBoundaries": {
-    "simpleMedium": 0.05,
+    "simpleMedium": 0.10,
     "mediumComplex": 0.25,
-    "complexReasoning": 0.5
+    "complexReasoning": 0.45
   },
+  "confidenceThreshold": 0.75,
+  "confidenceSteepness": 8,
   "thinking": {
-    "adaptive": ["qwen3.6:27b-fast", "qwen3.8:27b-fast", "qwen3-coder:30b-fast"],
-    "enabled": { "models": ["qwen3.6:27b-fast", "qwen3-coder:30b-fast"], "budget": 4096 }
+    "adaptive": ["nemotron-3-super-120b-a12b:free", "laguna-s-2.1"],
+    "enabled": { "models": ["gpt-oss-20b", "gpt-oss-120b"], "budget": 4096 }
+  },
+  "classifier": {
+    "baseUrl": "http://192.168.10.8:8081",
+    "model": "/opt/laya-router/models/Laya-Q8_0.gguf",
+    "timeoutMs": 5000,
+    "promptTemplate": "Classify the user prompt into one of four complexity tiers: SIMPLE, MEDIUM, COMPLEX, or REASONING. Consider the depth of reasoning, code complexity, and task requirements when classifying."
   }
 }

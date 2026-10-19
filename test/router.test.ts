@@ -20,6 +20,21 @@ async function decide(prompt: string, config?: RoutingConfig) {
   });
 }
 
+/**
+ * Decide via Laya, retrying if Laya stalled and the router fell back to rules.
+ * Laya is a network dependency that occasionally stalls for several seconds,
+ * so a single timeout can flake a live integration test. Retrying keeps the
+ * assertion meaningful without coupling the suite to Laya's tail latency.
+ */
+async function decideViaLaya(prompt: string, config: RoutingConfig, attempts = 3) {
+  let decision = await decide(prompt, config);
+  for (let i = 1; i < attempts && decision.method !== "llm"; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    decision = await decide(prompt, config);
+  }
+  return decision;
+}
+
 describe("route()", () => {
   it("routes a greeting to SIMPLE", async () => {
     const d = await decide("Hello!");
@@ -167,14 +182,14 @@ describe("route()", () => {
       classifier: {
         baseUrl: "http://192.168.10.8:8081",
         model: "/opt/laya-router/models/Laya-Q8_0.gguf",
-        timeoutMs: 5000,
+        timeoutMs: 10000,
         promptTemplate: "Classify into SIMPLE, MEDIUM, COMPLEX, or REASONING.",
         maxPromptTokens: 2048,
       },
     };
 
     // Test: coding task → should be MEDIUM
-    const coding = await decide(
+    const coding = await decideViaLaya(
       "Write a Python function to validate email addresses using regex.",
       configWithRealLaya,
     );
@@ -182,14 +197,14 @@ describe("route()", () => {
     assert.equal(coding.tier, "MEDIUM");
 
     // Test: greeting → should be SIMPLE
-    const greeting = await decide("Hello, how are you today?", configWithRealLaya);
+    const greeting = await decideViaLaya("Hello, how are you today?", configWithRealLaya);
     assert.equal(greeting.method, "llm");
     assert.equal(greeting.tier, "SIMPLE");
 
     // Test: reasoning task → should be REASONING via LLM
     // Note: we avoid keywords like "prove"/"theorem"/"formally" so the
     // rule-based classifier stays ambiguous and triggers the LLM path.
-    const reasoning = await decide(
+    const reasoning = await decideViaLaya(
       "What is the formal method for demonstrating that a statement is universally true?",
       configWithRealLaya,
     );
