@@ -61,16 +61,7 @@ Native decision models like Laya use a structured request/response format instea
 
 ### API Strategy
 
-The `classifyByLlm` function uses a **two-phase API strategy**:
-
-1. **Phase 1 (primary)**: `POST /v1/systemone` — llama.cpp's System One API for native decision models. This is the **correct API for Laya**. Laya returns structured `choice`, `probabilities`, and `confidence` values.
-
-2. **Phase 2 (fallback for non-decision models)**: If `/v1/systemone` returns 404 (endpoint not found, meaning the server doesn't support decision models), the module falls back to the OpenAI-compatible chain for non-decision models:
-   - `/v1/chat/completions` (default)
-   - `/v1/completions`
-   - `/completion`
-
-> **Note**: Laya is a decision model and does **not** support chat completions. If `/v1/systemone` fails for Laya, Phase 2 will also fail (Laya lacks a text-generation LM head). The chat completions fallback exists to support hybrid setups where you might swap in a different text-generation LLM as the classifier without changing code.
+The `classifyByLlm` function calls Laya via `POST /v1/systemone` — llama.cpp's System One API for native decision models. This is the **only API needed for Laya**. Laya returns structured `choice`, `probabilities`, and `confidence` values.
 
 ### Verified Classifications
 
@@ -104,14 +95,10 @@ FreeRouter's rule-based classifier (`src/router/rules.ts`) handles 70–80% of r
 user prompt → [Step 1: Rule Classifier (<1ms, zero cost)]
                     ├── Confident (conf ≥ threshold) → route with method="rules"
                     └── Ambiguous (conf < threshold):
-                        ├── Laya not configured → fallback to MEDIUM, method="rules" (existing)
-                        └── Laya configured → [Step 2: Laya classifier via /v1/systemone]
+                        ├── Laya not configured → fallback to MEDIUM, method="rules"
+                        └── Laya configured → POST /v1/systemone (System One API)
                             ├── Laya success → route with method="llm"
                             └── Laya failure/timeout → fallback to MEDIUM, method="rules"
-
-Note: Laya is a decision model. Phase 2 (chat completions fallback) is NOT
-reachable for Laya — the chat/completions endpoints return errors. The fallback
-chain only activates if you configure a non-decision-model LLM as the classifier.
 ```
 
 Key properties:
@@ -129,16 +116,9 @@ Add to `freerouter.config.json` (optional — absent means rules-only):
   "classifier": {
     "baseUrl": "http://192.168.10.8:8081",
     "model": "/opt/laya-router/models/Laya-Q8_0.gguf",
-    "apiKeyEnv": "LAYA_API_KEY",
-    "timeoutMs": 1000,
-    "promptTemplate": "Classify into SIMPLE, MEDIUM, COMPLEX, or REASONING.",
-    "maxPromptTokens": 2048,
-    "classCriteria": {
-      "SIMPLE": "basic questions, simple definitions, greetings, simple translations",
-      "MEDIUM": "moderate coding tasks, explanations, medium complexity problems",
-      "COMPLEX": "advanced algorithms, system design, complex multi-step tasks",
-      "REASONING": "mathematical proofs, logical reasoning, step-by-step derivations, formal analysis"
-    }
+    "timeoutMs": 2000,
+    "promptTemplate": "Classify the user prompt into one of four complexity tiers: SIMPLE, MEDIUM, COMPLEX, or REASONING.",
+    "maxPromptTokens": 2048
   }
 }
 ```
@@ -152,33 +132,27 @@ Add to `freerouter.config.json` (optional — absent means rules-only):
 | `promptTemplate` | `string` | Yes | — | Instruction text sent as the `instructions` field in the System One API question |
 | `maxPromptTokens` | `number` | No | `2048` | Maximum prompt tokens to send to Laya. Prompts exceeding this are truncated. |
 | `classCriteria` | `Record<string, string>` | No | built-in defaults | Tier descriptions for the System One API `criteria` field. Only entries matching valid tiers (SIMPLE, MEDIUM, COMPLEX, REASONING) are sent. |
-| `apiPath` | `string` | No | — | *(Deprecated for Laya)* Only used in Phase 2 fallback paths for non-decision models. Laya requires `/v1/systemone` — chat completions endpoints return errors. |
-
 
 ## File-by-File Changes
 
 ### 1. New file: `src/router/llm.ts`
 
-LLM classifier module. Calls Laya via the `/v1/systemone` endpoint (System One API for decision models) with a chat completions fallback chain for non-decision models. Returns `ScoringResult` with a validated tier, or `null` on any failure.
+LLM classifier module. Calls Laya via the `/v1/systemone` endpoint (System One API for decision models). Returns `ScoringResult` with a validated tier, or `null` on any failure.
 
 Key design decisions:
 - **No external dependencies** — uses native `fetch` + `AbortController` (same pattern as `provider.ts`).
-- **Two-phase API strategy**:
-  - **Phase 1**: `POST /v1/systemone` with structured `state` + `questions` format (native decision models like Laya).
-  - **Phase 2**: If System One returns 404 (endpoint not found), fall back to chat completions chain: `/v1/chat/completions` → `/v1/completions` → `/completion`. This fallback is for non-decision LLMs, not Laya itself.
+- **System One API only** — single-phase strategy: `POST /v1/systemone`. No chat completions fallback (Laya is a decision model that lacks a text-generation LM head).
 - **Structured response parsing** — extracts `choice`, `confidence`, and `probabilities` from `answers.{question}.` fields.
-- **Flexible response parsing (Phase 2)** — handles both OpenAI chat format (`choices[0].message.content`) and raw completions format (`choices[0].text`). JSON extracted from prose/code blocks as fallback.
 - **Prompt truncation** — truncates prompts to `maxPromptTokens` (default 2048) before sending, reducing token cost on long prompts.
 - **Validation** — tier validated against `VALID_TIERS` set; confidence validated as number in [0, 1].
 - **Metrics** — lazily registered via `registerLayaMetrics()` to avoid import cycles. Records counter (by result type) and histogram (latency).
-- **Error handling** — failure modes: network error, timeout (AbortError), parse error, invalid response. All return `null`.
+- **Error handling** — failure modes: network error, timeout (AbortError), invalid response. All return `null`.
 
 ```typescript
 // Key signature
 export async function classifyByLlm(
   prompt: string,
   systemPrompt: string | undefined,
-  estimatedTokens: number,
   classifier: LayaClassifierConfig,
 ): Promise<ScoringResult | null>
 ```
@@ -186,9 +160,10 @@ export async function classifyByLlm(
 ### 2. `src/router/types.ts` (modified)
 
 - Added `LayaClassifierConfig` type with fields:
-  - `apiPath?: string` — deprecated; affects Phase 2 fallback paths only
   - `maxPromptTokens?: number` — prompt truncation limit (default: 2048)
   - `classCriteria?: Record<string, string>` — tier descriptions for System One API
+  - `apiPath?: string` — *(deprecated; no longer used)*
+  - `apiKeyEnv?: string` — optional Bearer token env var
 - Added `classifier?: LayaClassifierConfig` to `RoutingConfig`.
 - Added `reasoning?: string` to `ScoringResult` (so Laya's explanation flows through).
 
@@ -206,7 +181,7 @@ export async function classifyByLlm(
 
 ### 5. `src/config.ts` (modified)
 
-- Added `classifier?` field to `FreeRouterConfig` type with the same fields as `LayaClassifierConfig` (including `classCriteria`).
+- Added `classifier?` field to `FreeRouterConfig` type with the same fields as `LayaClassifierConfig`.
 
 ### 6. `src/metrics.ts` (modified)
 
@@ -245,7 +220,7 @@ export async function classifyByLlm(
 | "Hello!" → SIMPLE | ≥ threshold | Yes | (not called) | SIMPLE | rules |
 | Ambiguous (score near boundary) | < threshold | No | N/A | MEDIUM (default) | rules |
 | Ambiguous | < threshold | Yes | Success (System One) | Laya's tier | **llm** |
-| Ambiguous | < threshold | Yes | System One 404 | N/A — Laya doesn't support chat completions | MEDIUM (default) | rules |
+| Ambiguous | < threshold | Yes | Non-200 response | MEDIUM (default) | rules |
 | Ambiguous | < threshold | Yes | Timeout | MEDIUM (default) | rules |
 | Ambiguous | < threshold | Yes | Parse error | MEDIUM (default) | rules |
 | Ambiguous | < threshold | Yes | Invalid tier | MEDIUM (default) | rules |
@@ -255,6 +230,7 @@ export async function classifyByLlm(
 ## Breaking Changes
 
 - `route()` is now `async` — returns `Promise<RoutingDecision>` instead of `RoutingDecision`. All three call sites updated (`server.ts`, `index.ts` JSDoc, `router.test.ts`).
+- `classifyByLlm()` signature simplified — `estimatedTokens` parameter removed (was unused).
 
 ## Future Enhancements
 

@@ -190,6 +190,7 @@ For ambiguous requests (confidence below threshold), FreeRouter can use Laya —
 | `promptTemplate` | `string` | Yes | Instruction text sent to Laya |
 | `apiKeyEnv` | `string` | No | Env var for Bearer authorization |
 | `maxPromptTokens` | `number` | No | Prompt truncation limit (default: 2048) |
+| `classCriteria` | `Record<string, string>` | No | Custom tier descriptions for System One API (default: built-in) |
 
 **How it works:**
 
@@ -328,7 +329,8 @@ freerouter/
 │       ├── config.ts      # Tier mappings + scoring weights
 │       ├── rules.ts       # Keyword-based scoring rules
 │       ├── selector.ts    # Tier → model selection + cost estimates
-│       └── types.ts       # Tier, RoutingDecision, config types
+│       ├── types.ts       # Tier, RoutingDecision, config types
+│       └── llm.ts         # LLM classifier (Laya integration, System One API)
 ├── docs/                  # Architecture, configuration, troubleshooting guides
 ├── scripts/               # Install/uninstall helpers
 ├── freerouter.config.json # Shipped config (local Ollama tiers)
