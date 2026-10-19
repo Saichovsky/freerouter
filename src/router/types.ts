@@ -26,10 +26,8 @@ export type LayaClassifierConfig = {
   apiKeyEnv?: string;
   timeoutMs: number;
   promptTemplate: string;
-  apiPath?: string;                      // API endpoint path (default: "/v1/chat/completions");
-                                          //   falls back to ["v1/completions", "completion"] if primary fails
-  maxPromptTokens?: number;              // Truncate prompt before sending to Laya (default: 2048)
-  classCriteria?: Record<string, string>; // Tier descriptions for System One API (default: built-in)
+  maxPromptTokens?: number;
+  classCriteria?: Record<string, string>;
 };
 
 export type RoutingDecision = {

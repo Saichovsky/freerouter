@@ -53,6 +53,8 @@ export type FreeRouterConfig = {
     mediumComplex: number;
     complexReasoning: number;
   };
+  confidenceThreshold?: number;
+  confidenceSteepness?: number;
   thinking?: ThinkingConfig;
   classifier?: {
     baseUrl: string;
@@ -60,7 +62,6 @@ export type FreeRouterConfig = {
     apiKeyEnv?: string;
     timeoutMs: number;
     promptTemplate: string;
-    apiPath?: string;
     maxPromptTokens?: number;
     classCriteria?: Record<string, string>;
   };
