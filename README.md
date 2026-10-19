@@ -25,6 +25,7 @@
 ## Features
 
 - **Smart routing** — 14-dimension weighted classifier scores every request and picks the best model
+- **Optional LLM fallback** — configure Laya (decision model) for ambiguous requests
 - **Mode overrides** *(new in v1.3.0)* — force a tier with `/max`, `/simple`, `[complex]`, `deep mode:` etc.
 - **Zero cost** — no subscription, no per-token fees, no payment layer
 - **External config** — `freerouter.config.json` for providers, tiers, boundaries, auth
@@ -166,6 +167,38 @@ If no config file exists, built-in defaults apply.
 
 `agenticTiers` (same shape as `tiers`) takes over when a request scores as an agentic task. `thinking.adaptive` lists models that receive `thinking: { type: "adaptive" }` on COMPLEX/REASONING tiers; `thinking.enabled` lists models that get a thinking budget (in tokens) on MEDIUM.
 
+### LLM Fallback Classifier (Laya Integration)
+
+For ambiguous requests (confidence below threshold), FreeRouter can use Laya — a self-hosted **decision model** — to classify prompts. This is **optional** — if no `classifier` config exists, behavior is identical to before.
+
+```json
+{
+  "classifier": {
+    "baseUrl": "http://192.168.10.8:8081",
+    "model": "/opt/laya-router/models/Laya-Q8_0.gguf",
+    "timeoutMs": 2000,
+    "promptTemplate": "Classify the user prompt into SIMPLE, MEDIUM, COMPLEX, or REASONING."
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `baseUrl` | `string` | Yes | Laya server URL (e.g., `http://192.168.10.8:8081`) |
+| `model` | `string` | Yes | Model path on the Laya server |
+| `timeoutMs` | `number` | Yes | Request timeout before fallback to default tier |
+| `promptTemplate` | `string` | Yes | Instruction text sent to Laya |
+| `apiKeyEnv` | `string` | No | Env var for Bearer authorization |
+| `maxPromptTokens` | `number` | No | Prompt truncation limit (default: 2048) |
+
+**How it works:**
+
+1. Laya is called via `/v1/systemone` (System One API — native decision models)
+2. Returns structured `choice`, `probabilities`, and `confidence`
+3. Fallback to `ambiguousDefaultTier` if Laya fails/times out
+
+See `docs/laya-integration-spec.md` for full integration guide.
+
 Provider `api` is `"anthropic"` (Messages API) or `"openai"` (OpenAI-compatible). Auth can come from OpenClaw `auth-profiles.json`, an env var (`"auth": { "type": "env", "key": "VAR_NAME" }`), and more — see `src/auth.ts` and `docs/configuration.md`.
 
 Reload without restart: `curl http://localhost:18800/reload-config`
@@ -173,7 +206,7 @@ Reload without restart: `curl http://localhost:18800/reload-config`
 ## Testing
 
 ```bash
-npm test   # 37 tests, zero extra dependencies (node:test + tsx)
+npm test   # 43 tests, zero extra dependencies (node:test + tsx)
 ```
 
 | File | What it covers |
@@ -238,6 +271,8 @@ scrape_configs:
 | `freerouter_cost_estimate_usd` | Gauge | `model` | Routing-time estimate; `0` for models with no pricing in `src/models.ts` |
 | `freerouter_request_duration_seconds` | Histogram | `tier`, `model` | Buckets: 0.1s–120s |
 | `freerouter_fallbacks_total` | Counter | `from_model`, `to_model` | Each fallback hop |
+| `freerouter_laya_classifications_total` | Counter | `result` | Laya calls: `success`, `failure`, `timeout`, `parse_error`, `invalid` |
+| `freerouter_laya_classification_duration_seconds` | Histogram | — | Laya classification latency |
 | `freerouter_up` | Gauge | — | Always `1` when serving |
 
 Streaming token counts are best-effort (not all providers report `usage` on streams); non-streaming counts are exact.
