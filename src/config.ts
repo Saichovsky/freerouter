@@ -54,6 +54,16 @@ export type FreeRouterConfig = {
     complexReasoning: number;
   };
   thinking?: ThinkingConfig;
+  classifier?: {
+    baseUrl: string;
+    model: string;
+    apiKeyEnv?: string;
+    timeoutMs: number;
+    promptTemplate: string;
+    apiPath?: string;
+    maxPromptTokens?: number;
+    classCriteria?: Record<string, string>;
+  };
   auth: {
     default: string;
     [strategy: string]: unknown;

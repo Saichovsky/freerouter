@@ -61,6 +61,20 @@ export const fallbacksTotal = new Counter({
   registers: [register],
 });
 
+export const layaClassificationsTotal = new Counter({
+  name: "freerouter_laya_classifications_total",
+  help: "Total Laya classifier invocations",
+  labelNames: ["result"],
+  registers: [register],
+});
+
+export const layaClassificationDurationSeconds = new Histogram({
+  name: "freerouter_laya_classification_duration_seconds",
+  help: "Laya classification latency in seconds",
+  buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5],
+  registers: [register],
+});
+
 export const up = new Gauge({
   name: "freerouter_up",
   help: "FreeRouter up status (1 = up)",
@@ -99,4 +113,12 @@ export function recordCostEstimate(model: string, cost: number): void {
 
 export function recordFallback(fromModel: string, toModel: string): void {
   fallbacksTotal.inc({ from_model: fromModel, to_model: toModel });
+}
+
+export function recordLayaClassification(
+  result: "success" | "failure" | "timeout" | "parse_error" | "invalid",
+  durationSec: number,
+): void {
+  layaClassificationsTotal.inc({ result });
+  layaClassificationDurationSeconds.observe({}, durationSec);
 }

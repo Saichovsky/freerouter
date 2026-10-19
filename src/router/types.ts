@@ -17,6 +17,19 @@ export type ScoringResult = {
   confidence: number; // sigmoid-calibrated [0, 1]
   signals: string[];
   agenticScore?: number; // 0-1 agentic task score for auto-switching to agentic tiers
+  reasoning?: string; // Populated by LLM classifier (e.g., Laya's explanation)
+};
+
+export type LayaClassifierConfig = {
+  baseUrl: string;
+  model: string;
+  apiKeyEnv?: string;
+  timeoutMs: number;
+  promptTemplate: string;
+  apiPath?: string;                      // API endpoint path (default: "/v1/chat/completions");
+                                          //   falls back to ["v1/completions", "completion"] if primary fails
+  maxPromptTokens?: number;              // Truncate prompt before sending to Laya (default: 2048)
+  classCriteria?: Record<string, string>; // Tier descriptions for System One API (default: built-in)
 };
 
 export type RoutingDecision = {
@@ -70,5 +83,6 @@ export type RoutingConfig = {
   scoring: ScoringConfig;
   tiers: Record<Tier, TierConfig>;
   agenticTiers?: Record<Tier, TierConfig>;
+  classifier?: LayaClassifierConfig;
   overrides: OverridesConfig;
 };

@@ -228,5 +228,10 @@ export function getRoutingConfig(): RoutingConfig {
     };
   }
 
+  // Pass through Laya classifier config
+  if (extCfg.classifier) {
+    config.classifier = extCfg.classifier;
+  }
+
   return config;
 }

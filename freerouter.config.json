@@ -31,5 +31,11 @@
   "thinking": {
     "adaptive": ["qwen3.6:27b-fast", "qwen3.8:27b-fast", "qwen3-coder:30b-fast"],
     "enabled": { "models": ["qwen3.6:27b-fast", "qwen3-coder:30b-fast"], "budget": 4096 }
+  },
+  "classifier": {
+    "baseUrl": "http://192.168.10.8:8081",
+    "model": "/opt/laya-router/models/Laya-Q8_0.gguf",
+    "timeoutMs": 2000,
+    "promptTemplate": "Classify the user prompt into one of four complexity tiers: SIMPLE, MEDIUM, COMPLEX, or REASONING. Consider the depth of reasoning, code complexity, and task requirements when classifying."
   }
 }

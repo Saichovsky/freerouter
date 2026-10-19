@@ -7,58 +7,194 @@ import {
   calculateModelCost,
   DEFAULT_ROUTING_CONFIG,
 } from "../src/router/index.js";
+import type { RoutingConfig } from "../src/router/types.js";
 import { buildPricingMap, getContextWindow } from "../src/models.js";
 import { parseModelId } from "../src/provider.js";
 
 const pricing = buildPricingMap();
 
-function decide(prompt: string) {
+async function decide(prompt: string, config?: RoutingConfig) {
   return route(prompt, undefined, 4096, {
-    config: DEFAULT_ROUTING_CONFIG,
+    config: config ?? DEFAULT_ROUTING_CONFIG,
     modelPricing: pricing,
   });
 }
 
 describe("route()", () => {
-  it("routes a greeting to SIMPLE", () => {
-    const d = decide("Hello!");
+  it("routes a greeting to SIMPLE", async () => {
+    const d = await decide("Hello!");
     assert.equal(d.tier, "SIMPLE");
     assert.equal(d.model, "kimi-coding/kimi-for-coding");
+    assert.equal(d.method, "rules");
   });
 
-  it("routes a formal proof to REASONING with high confidence", () => {
-    const d = decide(
+  it("routes a formal proof to REASONING with high confidence", async () => {
+    const d = await decide(
       "Prove that the square root of 2 is irrational. Show each step formally, step by step.",
     );
     assert.equal(d.tier, "REASONING");
     assert.equal(d.model, "anthropic/claude-opus-4-6");
     assert.ok(d.confidence > 0.5, `expected confidence > 0.5, got ${d.confidence}`);
+    assert.equal(d.method, "rules");
   });
 
-  it("upgrades structured-output requests to at least MEDIUM", () => {
-    const plain = decide("What is 2+2?");
-    const withJson = decide("What is 2+2? Reply in json.");
+  it("upgrades structured-output requests to at least MEDIUM", async () => {
+    const plain = await decide("What is 2+2?");
+    const withJson = await decide("What is 2+2? Reply in json.");
     assert.equal(plain.tier, "SIMPLE");
     assert.equal(withJson.tier, "MEDIUM");
   });
 
-  it("forces COMPLEX for very large inputs", () => {
-    const d = decide("a".repeat(400001));
+  it("forces COMPLEX for very large inputs", async () => {
+    const d = await decide("a".repeat(400001));
     assert.equal(d.tier, "COMPLEX");
   });
 
-  it("flags agentic tasks in the reasoning string", () => {
-    const d = decide(
+  it("flags agentic tasks in the reasoning string", async () => {
+    const d = await decide(
       "Read the file src/server.ts, fix the bug, and verify it works. Step 1: open the file. Step 2: edit it until it works.",
     );
     assert.ok(d.reasoning.includes("agentic"), `expected agentic flag, got: ${d.reasoning}`);
   });
 
-  it("returns cost estimate, baseline, and savings", () => {
-    const d = decide("Hello!");
+  it("returns cost estimate, baseline, and savings", async () => {
+    const d = await decide("Hello!");
     assert.ok(d.costEstimate >= 0);
     assert.ok(d.baselineCost >= d.costEstimate);
     assert.ok(d.savings >= 0 && d.savings <= 1);
+  });
+
+  // --- Laya integration tests ---
+
+  it("falls back to default tier when Laya is configured but endpoint is unreachable", async () => {
+    // Use a high confidenceThreshold so rules are always ambiguous,
+    // then Laya will be tried (and fail fast on unreachable endpoint)
+    const configWithLaya: RoutingConfig = {
+      ...DEFAULT_ROUTING_CONFIG,
+      scoring: {
+        ...DEFAULT_ROUTING_CONFIG.scoring,
+        confidenceThreshold: 0.99,  // everything is ambiguous → triggers Laya path
+      },
+      classifier: {
+        baseUrl: "http://127.0.0.1:1", // nothing listening → fast ECONNREFUSED
+        model: "laya",
+        timeoutMs: 100,
+        promptTemplate: "Classify into SIMPLE, MEDIUM, COMPLEX, or REASONING.",
+      },
+    };
+    const d = await decide("Kanban board design for a startup", configWithLaya);
+    // Laya failed → should fall back to ambiguousDefaultTier (MEDIUM)
+    assert.equal(d.tier, "MEDIUM");
+    assert.equal(d.method, "rules");
+    assert.ok(d.reasoning.includes("laya unavailable"));
+  });
+
+  it("falls back to default tier when no classifier is configured", async () => {
+    // High confidenceThreshold forces ambiguity; no classifier means pure rules fallback
+    const configNoClassifier: RoutingConfig = {
+      ...DEFAULT_ROUTING_CONFIG,
+      scoring: {
+        ...DEFAULT_ROUTING_CONFIG.scoring,
+        confidenceThreshold: 0.99,  // everything is ambiguous
+      },
+      // No classifier field → pure rules fallback
+    };
+    const d = await decide("Kanban board design for a startup", configNoClassifier);
+    assert.equal(d.tier, "MEDIUM");
+    assert.equal(d.method, "rules");
+    assert.ok(d.reasoning.includes("ambiguous"));
+  });
+
+  it("falls back to default tier when Laya is configured with a custom apiPath but endpoint is unreachable", async () => {
+    // Tests that the configurable apiPath field is used correctly
+    const configWithCustomPath: RoutingConfig = {
+      ...DEFAULT_ROUTING_CONFIG,
+      scoring: {
+        ...DEFAULT_ROUTING_CONFIG.scoring,
+        confidenceThreshold: 0.99,
+      },
+      classifier: {
+        baseUrl: "http://127.0.0.1:1",
+        model: "laya",
+        timeoutMs: 100,
+        promptTemplate: "Classify into SIMPLE, MEDIUM, COMPLEX, or REASONING.",
+        apiPath: "/my/custom/path",  // custom path — will fail → fallbacks will also fail
+      },
+    };
+    const d = await decide("Some prompt", configWithCustomPath);
+    assert.equal(d.tier, "MEDIUM");
+    assert.equal(d.method, "rules");
+    assert.ok(d.reasoning.includes("laya unavailable"));
+  });
+
+  it("verifies pure rules fallback when no classifier is configured", async () => {
+    // Verify that a high confidenceThreshold + no classifier means rules-only fallback
+    const configNoClassifier: RoutingConfig = {
+      ...DEFAULT_ROUTING_CONFIG,
+      scoring: {
+        ...DEFAULT_ROUTING_CONFIG.scoring,
+        confidenceThreshold: 0.99,
+      },
+    };
+    const d = await decide("Some prompt", configNoClassifier);
+    assert.equal(d.tier, "MEDIUM");
+    assert.equal(d.method, "rules");
+  });
+
+  it("classifies prompts via Laya's System One API when server is available", async () => {
+    // Skip if the Laya server at 192.168.10.8:8081 is not reachable
+    let layaAvailable = false;
+    try {
+      const healthRes = await fetch("http://192.168.10.8:8081/health", {
+        signal: AbortSignal.timeout(2000),
+      });
+      layaAvailable = healthRes.ok;
+    } catch {
+      // Laya not reachable — skip this test
+    }
+
+    if (!layaAvailable) {
+      console.log("  ℹ Skipping (Laya server not available)");
+      return;
+    }
+
+    const configWithRealLaya: RoutingConfig = {
+      ...DEFAULT_ROUTING_CONFIG,
+      scoring: {
+        ...DEFAULT_ROUTING_CONFIG.scoring,
+        confidenceThreshold: 0.99,  // force Laya path
+      },
+      classifier: {
+        baseUrl: "http://192.168.10.8:8081",
+        model: "/opt/laya-router/models/Laya-Q8_0.gguf",
+        timeoutMs: 5000,
+        promptTemplate: "Classify into SIMPLE, MEDIUM, COMPLEX, or REASONING.",
+        maxPromptTokens: 2048,
+      },
+    };
+
+    // Test: coding task → should be MEDIUM
+    const coding = await decide(
+      "Write a Python function to validate email addresses using regex.",
+      configWithRealLaya,
+    );
+    assert.equal(coding.method, "llm");
+    assert.equal(coding.tier, "MEDIUM");
+
+    // Test: greeting → should be SIMPLE
+    const greeting = await decide("Hello, how are you today?", configWithRealLaya);
+    assert.equal(greeting.method, "llm");
+    assert.equal(greeting.tier, "SIMPLE");
+
+    // Test: reasoning task → should be REASONING via LLM
+    // Note: we avoid keywords like "prove"/"theorem"/"formally" so the
+    // rule-based classifier stays ambiguous and triggers the LLM path.
+    const reasoning = await decide(
+      "What is the formal method for demonstrating that a statement is universally true?",
+      configWithRealLaya,
+    );
+    assert.equal(reasoning.method, "llm");
+    assert.equal(reasoning.tier, "REASONING");
   });
 });
 
@@ -120,5 +256,9 @@ describe("DEFAULT_ROUTING_CONFIG", () => {
       "REASONING",
       "SIMPLE",
     ]);
+  });
+
+  it("does not define a classifier by default", () => {
+    assert.equal(DEFAULT_ROUTING_CONFIG.classifier, undefined);
   });
 });

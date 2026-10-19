@@ -30,6 +30,11 @@ import {
   recordCostEstimate,
   recordFallback,
 } from "./metrics.js";
+import {
+  layaClassificationsTotal,
+  layaClassificationDurationSeconds,
+} from "./metrics.js";
+import { registerLayaMetrics } from "./router/llm.js";
 
 // Load config at startup
 const appConfig = loadConfig();
@@ -41,6 +46,9 @@ const modelPricing = buildPricingMap();
 
 // Initialize metrics
 setUpMetrics();
+
+// Register Laya classifier metrics
+registerLayaMetrics(layaClassificationsTotal, layaClassificationDurationSeconds);
 
 // Stats
 const stats = {
@@ -234,7 +242,7 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse) 
       logger.info(`[${stats.requests + 1}] Mode override: tier=${tier} model=${routedModel} | ${reasoning}`);
     } else {
       // Run the classifier
-      const decision = route(prompt, systemPrompt, maxTokens, {
+      const decision = await route(prompt, systemPrompt, maxTokens, {
         config: getRoutingConfig(),
         modelPricing,
       });
@@ -244,7 +252,7 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse) 
       reasoning = decision.reasoning;
 
       recordCostEstimate(decision.model, decision.costEstimate);
-      logger.info(`[${stats.requests + 1}] Classified: tier=${tier} model=${routedModel} confidence=${decision.confidence.toFixed(2)} | ${reasoning}`);
+      logger.info(`[${stats.requests + 1}] Classified (${decision.method}): tier=${tier} model=${routedModel} confidence=${decision.confidence.toFixed(2)} | ${reasoning}`);
     }
   } else {
     // Explicit model requested — pass through

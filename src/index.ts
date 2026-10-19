@@ -8,7 +8,7 @@
  * Usage:
  *   import { route, DEFAULT_ROUTING_CONFIG, buildPricingMap } from "./index.js";
  *
- *   const decision = route("Prove sqrt(2) is irrational", undefined, 4096, {
+ *   const decision = await route("Prove sqrt(2) is irrational", undefined, 4096, {
  *     config: DEFAULT_ROUTING_CONFIG,
  *     modelPricing: buildPricingMap(),
  *   });
@@ -19,6 +19,7 @@
 
 // Router
 export { route, DEFAULT_ROUTING_CONFIG } from "./router/index.js";
+export { classifyByLlm, registerLayaMetrics } from "./router/llm.js";
 export { getFallbackChain, getFallbackChainFiltered, calculateModelCost } from "./router/selector.js";
 export { classifyByRules } from "./router/rules.js";
 
@@ -30,6 +31,7 @@ export type {
   TierConfig,
   ScoringConfig,
   ScoringResult,
+  LayaClassifierConfig,
 } from "./router/types.js";
 export type { ModelPricing } from "./router/selector.js";
 
