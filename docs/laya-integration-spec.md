@@ -3,8 +3,9 @@
 ## Status: Implemented & Verified
 
 > **Branch**: `feat/laya-classifier-integration`
-> **Verification**: 43 tests pass, tsc clean, ESLint clean, server starts, metrics exposed
-> **Live test**: All three tier classifications verified against Laya at 192.168.10.8:8081 ✓
+> **Verification**: 43 tests pass across 3 consecutive runs, tsc clean, ESLint clean, server starts, metrics exposed
+> **Live test**: All three tier classifications verified against Laya at 192.168.10.8:8081 ✓ (with retry for Laya's tail latency)
+> **Deployed**: `raspberry-pi` (192.168.10.6) → Laya at `serverbox` (192.168.10.8:8081), verified live
 
 ## Laya Exploration Findings
 
@@ -84,10 +85,15 @@ FreeRouter's rule-based classifier (`src/router/rules.ts`) handles 70–80% of r
 
 | | Rule-only today | Full Laya replacement | **Hybrid (this spec)** |
 |---|---|---|---|
-| Every request latency | <1ms | +50–500ms | <1ms for 70–80%, +latency only for ambiguous 20–30% |
-| Classification cost | Zero | Per-call Laya tokens | Zero for 70–80%, Laya tokens only for ambiguous |
+| Every request latency | <1ms | +0.4–1s (tail to 5s) | <1ms for confident requests, +latency only for ambiguous |
+| Classification cost | Zero | Per-call Laya tokens | Zero for confident requests, Laya tokens only for ambiguous |
 | Failure blast radius | None | All auto-routing fails | Only ambiguous requests degrade to MEDIUM |
 | Backward compatibility | N/A | Breaking | **None — optional config** |
+
+The share sent to Laya is controlled by the top-level `confidenceThreshold`, not
+by this integration. At the shipped default of `0.50` that share is **0 %**
+(sigmoid floor). At `0.75` it is the **majority** of ordinary prompts (78 % in a
+32-request live sample). See [Tuning the rules/Laya split](#tuning-the-ruleslaya-split).
 
 ## Architecture
 
@@ -109,14 +115,19 @@ Key properties:
 
 ## Config Schema
 
-Add to `freerouter.config.json` (optional — absent means rules-only):
+Add to the deployment config — `config.json` (the Pi's unit sets
+`FREEROUTER_CONFIG=/opt/freerouter/config.json`) or `freerouter.config.json`
+(the repo's shipped default). The `classifier` block is optional; absent means
+rules-only.
 
 ```json
 {
+  "confidenceThreshold": 0.75,
+  "confidenceSteepness": 8,
   "classifier": {
     "baseUrl": "http://192.168.10.8:8081",
     "model": "/opt/laya-router/models/Laya-Q8_0.gguf",
-    "timeoutMs": 2000,
+    "timeoutMs": 5000,
     "promptTemplate": "Classify the user prompt into one of four complexity tiers: SIMPLE, MEDIUM, COMPLEX, or REASONING.",
     "maxPromptTokens": 2048
   }
@@ -128,10 +139,30 @@ Add to `freerouter.config.json` (optional — absent means rules-only):
 | `baseUrl` | `string` | Yes | — | Laya API base URL (e.g., `http://192.168.10.8:8081`) |
 | `model` | `string` | Yes | — | Model identifier path (e.g., `/opt/laya-router/models/Laya-Q8_0.gguf`) |
 | `apiKeyEnv` | `string` | No | — | Env var name for `Authorization: Bearer` header |
-| `timeoutMs` | `number` | Yes | — | Request timeout in milliseconds |
+| `timeoutMs` | `number` | Yes | — | Request timeout in milliseconds. **Use `5000`** (see Operational Notes). |
 | `promptTemplate` | `string` | Yes | — | Instruction text sent as the `instructions` field in the System One API question |
 | `maxPromptTokens` | `number` | No | `2048` | Maximum prompt tokens to send to Laya. Prompts exceeding this are truncated. |
 | `classCriteria` | `Record<string, string>` | No | built-in defaults | Tier descriptions for the System One API `criteria` field. Only entries matching valid tiers (SIMPLE, MEDIUM, COMPLEX, REASONING) are sent. |
+
+### Tuning the rules/Laya split
+
+`confidenceThreshold` and `confidenceSteepness` are **top-level routing fields**,
+not part of the `classifier` block. `getRoutingConfig()` passes both through from
+the external config.
+
+The rule classifier's confidence is a sigmoid whose minimum is `0.5`, so the
+default `0.50` threshold can never be undershot — **Laya is dead code until the
+threshold is raised**. Measured effect of the threshold on a 32-request sample:
+
+| `confidenceThreshold` | Share of requests sent to Laya |
+|---|---|
+| `0.50` (default) | 0 % |
+| `0.75` | ~78 % |
+| `0.95` | ~100 % |
+
+Pick the value that matches how much Laya latency you are willing to pay per
+request. `confidenceSteepness` (default `8`) widens or narrows the confidence
+distribution; raising it makes the rules more decisive near boundaries.
 
 ## File-by-File Changes
 
@@ -162,7 +193,6 @@ export async function classifyByLlm(
 - Added `LayaClassifierConfig` type with fields:
   - `maxPromptTokens?: number` — prompt truncation limit (default: 2048)
   - `classCriteria?: Record<string, string>` — tier descriptions for System One API
-  - `apiPath?: string` — *(deprecated; no longer used)*
   - `apiKeyEnv?: string` — optional Bearer token env var
 - Added `classifier?: LayaClassifierConfig` to `RoutingConfig`.
 - Added `reasoning?: string` to `ScoringResult` (so Laya's explanation flows through).
@@ -178,10 +208,12 @@ export async function classifyByLlm(
 ### 4. `src/router/config.ts` (modified)
 
 - `getRoutingConfig()` passes through `classifier` from the external config file, same pattern as `tiers`, `agenticTiers`, and `tierBoundaries`.
+- Supports `confidenceThreshold` and `confidenceSteepness` overrides from external config.
 
 ### 5. `src/config.ts` (modified)
 
 - Added `classifier?` field to `FreeRouterConfig` type with the same fields as `LayaClassifierConfig`.
+- Added top-level `confidenceThreshold?: number` and `confidenceSteepness?: number` so the rules/Laya split is configurable without editing source.
 
 ### 6. `src/metrics.ts` (modified)
 
@@ -207,10 +239,37 @@ export async function classifyByLlm(
 - New tests:
   - "falls back to default tier when Laya is configured but endpoint is unreachable" — uses unreachable endpoint, verifies graceful fallback to MEDIUM with `method: "rules"` and "laya unavailable" in reasoning.
   - "falls back to default tier when no classifier is configured" — verifies pure rules path still works without classifier config.
-  - "falls back to default tier when Laya is configured with a custom apiPath but endpoint is unreachable" — verifies graceful degradation when an unreachable endpoint is configured.
+  - "falls back to default tier when Laya is configured with classCriteria but endpoint is unreachable" — verifies optional classifier fields (`classCriteria`, `maxPromptTokens`) don't disturb graceful degradation.
   - "verifies pure rules fallback when no classifier is configured" — verifies that a high confidenceThreshold + no classifier means rules-only fallback.
   - "does not define a classifier by default" — verifies `DEFAULT_ROUTING_CONFIG.classifier === undefined`.
   - "classifies prompts via Laya's System One API when server is available" — live integration test against `192.168.10.8:8081` (skips if unreachable). Verifies MEDIUM, SIMPLE, and REASONING classifications via Laya.
+
+## Operational Notes (measured)
+
+Live latency of Laya's System One API, measured from the router host with the
+default `classCriteria` and `promptTemplate`:
+
+| Metric | Value |
+|---|---|
+| p50 | ~0.95 s |
+| p90 | ~3.4 s |
+| p99 | ~4.6 s |
+| Occasional stalls | >4 s, rarely >10 s |
+
+Two things dominate latency:
+
+1. **Payload size** — the four `classCriteria` descriptions roughly double
+   Laya's forward-pass time (p50 0.42 s with one-word criteria vs ~0.95 s with
+   the defaults). Keep `classCriteria` concise if latency matters more than
+   classification detail.
+2. **Intermittent server stalls** — llama.cpp on `serverbox` occasionally
+   stalls for several seconds regardless of payload.
+
+**Recommended `timeoutMs: 5000`.** With a 2 s timeout ~20 % of real requests
+fell back to rules. At 5 s the fallback rate dropped to ~4 % (1 timeout in 25
+live calls; 0 in a separate 16-call burst). The 2 s default in early builds is
+too aggressive. Raising to `8000` trades longer worst-case waits for an even
+lower fallback rate.
 
 ## Behavior Matrix
 

@@ -132,6 +132,15 @@ FreeRouter looks for config in this order:
 
 If no config file exists, built-in defaults apply.
 
+Two config files live in the repo:
+
+| File | Role |
+|---|---|
+| `freerouter.config.json` | Shipped sample (local Ollama tiers). Used when no `FREEROUTER_CONFIG` is set and the cwd is the repo. |
+| `config.json` | Deployment config — mirrors what runs on the Pi. The Pi's systemd unit sets `FREEROUTER_CONFIG=/opt/freerouter/config.json`. |
+
+Keep `config.json` in sync with the Pi when changing providers, tiers, or classifier settings.
+
 ### Config File Structure
 
 ```json
@@ -173,10 +182,11 @@ For ambiguous requests (confidence below threshold), FreeRouter can use Laya —
 
 ```json
 {
+  "confidenceThreshold": 0.75,
   "classifier": {
     "baseUrl": "http://192.168.10.8:8081",
     "model": "/opt/laya-router/models/Laya-Q8_0.gguf",
-    "timeoutMs": 2000,
+    "timeoutMs": 5000,
     "promptTemplate": "Classify the user prompt into SIMPLE, MEDIUM, COMPLEX, or REASONING."
   }
 }
@@ -186,11 +196,13 @@ For ambiguous requests (confidence below threshold), FreeRouter can use Laya —
 |-------|------|----------|-------------|
 | `baseUrl` | `string` | Yes | Laya server URL (e.g., `http://192.168.10.8:8081`) |
 | `model` | `string` | Yes | Model path on the Laya server |
-| `timeoutMs` | `number` | Yes | Request timeout before fallback to default tier |
+| `timeoutMs` | `number` | Yes | Request timeout before fallback to default tier. **`5000` recommended** (see Timeout Tuning) |
 | `promptTemplate` | `string` | Yes | Instruction text sent to Laya |
 | `apiKeyEnv` | `string` | No | Env var for Bearer authorization |
 | `maxPromptTokens` | `number` | No | Prompt truncation limit (default: 2048) |
 | `classCriteria` | `Record<string, string>` | No | Custom tier descriptions for System One API (default: built-in) |
+
+`confidenceThreshold` and `confidenceSteepness` are top-level routing settings, not `classifier` fields — see [Confidence Threshold](#confidence-threshold).
 
 **How it works:**
 
@@ -199,6 +211,31 @@ For ambiguous requests (confidence below threshold), FreeRouter can use Laya —
 3. Fallback to `ambiguousDefaultTier` if Laya fails/times out
 
 See `docs/laya-integration-spec.md` for full integration guide.
+
+### Confidence Threshold
+
+The rule-based classifier uses a sigmoid confidence calibration. By default, `confidenceThreshold` is `0.50` — however, the sigmoid's minimum output is `0.5` (at the exact tier boundary), so `confidence < 0.50` is mathematically impossible. **Laya is never triggered with the default threshold.**
+
+To make Laya actually trigger on ambiguous requests, add `confidenceThreshold` to your config:
+
+```json
+{
+  "confidenceThreshold": 0.75,
+  "confidenceSteepness": 8
+}
+```
+
+| Threshold | When Laya triggers |
+|-----------|-------------------|
+| `0.50` (default) | Never — sigmoid floor is 0.5 |
+| `0.75` | Most prompts (~78% in a 32-request live sample) |
+| `0.95` | Effectively every prompt |
+
+At `0.75` you are paying ~1s of Laya latency on most requests, not just the borderline ones. Lower it (e.g. `0.62`–`0.65`) if you want the rule fast path to dominate.
+
+### Timeout Tuning
+
+Laya's System One API measured p50 ≈ 0.95 s, p90 ≈ 3.4 s, p99 ≈ 4.6 s, with occasional multi-second stalls. A `timeoutMs` of `2000` caused ~20% of ambiguous requests to fall back to rules; `5000` reduced that to ~4% (1 timeout in 25 live calls, 0 in a separate 16-call burst). **Use `timeoutMs: 5000`** unless your Laya host is faster; `8000` reduces fallbacks further at the cost of longer worst-case waits. Shorter `classCriteria` descriptions also roughly halve latency.
 
 Provider `api` is `"anthropic"` (Messages API) or `"openai"` (OpenAI-compatible). Auth can come from OpenClaw `auth-profiles.json`, an env var (`"auth": { "type": "env", "key": "VAR_NAME" }`), and more — see `src/auth.ts` and `docs/configuration.md`.
 
