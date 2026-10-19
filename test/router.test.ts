@@ -120,9 +120,10 @@ describe("route()", () => {
     assert.ok(d.reasoning.includes("ambiguous"));
   });
 
-  it("falls back to default tier when Laya is configured with a custom apiPath but endpoint is unreachable", async () => {
-    // Tests that the configurable apiPath field is used correctly
-    const configWithCustomPath: RoutingConfig = {
+  it("falls back to default tier when Laya is configured with classCriteria but endpoint is unreachable", async () => {
+    // Optional classifier fields (classCriteria, maxPromptTokens) must not
+    // disturb the graceful-degradation path.
+    const configWithCriteria: RoutingConfig = {
       ...DEFAULT_ROUTING_CONFIG,
       scoring: {
         ...DEFAULT_ROUTING_CONFIG.scoring,
@@ -133,10 +134,11 @@ describe("route()", () => {
         model: "laya",
         timeoutMs: 100,
         promptTemplate: "Classify into SIMPLE, MEDIUM, COMPLEX, or REASONING.",
-        apiPath: "/my/custom/path",  // custom path — will fail → fallbacks will also fail
+        maxPromptTokens: 512,
+        classCriteria: { SIMPLE: "basic", MEDIUM: "moderate", COMPLEX: "advanced", REASONING: "proofs" },
       },
     };
-    const d = await decide("Some prompt", configWithCustomPath);
+    const d = await decide("Some prompt", configWithCriteria);
     assert.equal(d.tier, "MEDIUM");
     assert.equal(d.method, "rules");
     assert.ok(d.reasoning.includes("laya unavailable"));
