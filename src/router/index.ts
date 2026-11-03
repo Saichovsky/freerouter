@@ -8,6 +8,7 @@
 
 import type { Tier, RoutingDecision, RoutingConfig } from "./types.js";
 import { classifyByRules } from "./rules.js";
+import { classifyByLlm } from "./llm.js";
 import { selectModel, type ModelPricing } from "./selector.js";
 
 export type RouterOptions = {
@@ -24,12 +25,12 @@ export type RouterOptions = {
  * 4. Select model for tier
  * 5. Return RoutingDecision with metadata
  */
-export function route(
+export async function route(
   prompt: string,
   systemPrompt: string | undefined,
   maxOutputTokens: number,
   options: RouterOptions,
-): RoutingDecision {
+): Promise<RoutingDecision> {
   const { config, modelPricing } = options;
 
   // Separate token counts: user prompt for complexity, total for context limits
@@ -68,12 +69,26 @@ export function route(
 
   let tier: Tier;
   let confidence: number;
-  const method: "rules" | "llm" = "rules";
+  let method: "rules" | "llm" = "rules";
   let reasoning = `score=${ruleResult.score.toFixed(2)} | ${ruleResult.signals.join(", ")}`;
 
   if (ruleResult.tier !== null) {
     tier = ruleResult.tier;
     confidence = ruleResult.confidence;
+  } else if (config.classifier) {
+    // Ambiguous from rules — try Laya LLM classifier for disambiguation
+    const llmResult = await classifyByLlm(prompt, systemPrompt, config.classifier);
+    if (llmResult?.tier) {
+      tier = llmResult.tier;
+      confidence = llmResult.confidence;
+      method = "llm";
+      reasoning += ` | laya: ${llmResult.reasoning ?? `tier=${tier}, conf=${confidence.toFixed(2)}`}`;
+    } else {
+      // Laya failed or returned null — fall back to rules-based default
+      tier = config.overrides.ambiguousDefaultTier;
+      confidence = 0.5;
+      reasoning += ` | ambiguous -> default: ${tier} (laya unavailable)`;
+    }
   } else {
     tier = config.overrides.ambiguousDefaultTier;
     confidence = 0.5;
@@ -110,5 +125,6 @@ export function route(
 
 export { getFallbackChain, getFallbackChainFiltered, calculateModelCost } from "./selector.js";
 export { DEFAULT_ROUTING_CONFIG } from "./config.js";
-export type { RoutingDecision, Tier, RoutingConfig } from "./types.js";
+export { classifyByLlm, registerLayaMetrics } from "./llm.js";
+export type { RoutingDecision, Tier, RoutingConfig, LayaClassifierConfig } from "./types.js";
 export type { ModelPricing } from "./selector.js";

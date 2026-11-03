@@ -17,6 +17,17 @@ export type ScoringResult = {
   confidence: number; // sigmoid-calibrated [0, 1]
   signals: string[];
   agenticScore?: number; // 0-1 agentic task score for auto-switching to agentic tiers
+  reasoning?: string; // Populated by LLM classifier (e.g., Laya's explanation)
+};
+
+export type LayaClassifierConfig = {
+  baseUrl: string;
+  model: string;
+  apiKeyEnv?: string;
+  timeoutMs: number;
+  promptTemplate: string;
+  maxPromptTokens?: number;
+  classCriteria?: Record<string, string>;
 };
 
 export type RoutingDecision = {
@@ -70,5 +81,6 @@ export type RoutingConfig = {
   scoring: ScoringConfig;
   tiers: Record<Tier, TierConfig>;
   agenticTiers?: Record<Tier, TierConfig>;
+  classifier?: LayaClassifierConfig;
   overrides: OverridesConfig;
 };

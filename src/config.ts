@@ -53,7 +53,18 @@ export type FreeRouterConfig = {
     mediumComplex: number;
     complexReasoning: number;
   };
+  confidenceThreshold?: number;
+  confidenceSteepness?: number;
   thinking?: ThinkingConfig;
+  classifier?: {
+    baseUrl: string;
+    model: string;
+    apiKeyEnv?: string;
+    timeoutMs: number;
+    promptTemplate: string;
+    maxPromptTokens?: number;
+    classCriteria?: Record<string, string>;
+  };
   auth: {
     default: string;
     [strategy: string]: unknown;

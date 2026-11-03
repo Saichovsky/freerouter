@@ -203,8 +203,9 @@ export const DEFAULT_ROUTING_CONFIG: RoutingConfig = {
 
 /**
  * Get the effective routing config, merging external config overrides.
- * External config can override: tiers, agenticTiers, tierBoundaries.
- * Scoring weights and keywords remain as coded defaults (advanced users edit source).
+ * External config can override: tiers, agenticTiers, tierBoundaries,
+ * confidenceThreshold, confidenceSteepness, classifier.
+ * Scoring keywords/weights remain coded defaults (advanced users edit source).
  */
 export function getRoutingConfig(): RoutingConfig {
   const extCfg = getConfig();
@@ -226,6 +227,25 @@ export function getRoutingConfig(): RoutingConfig {
       ...config.scoring,
       tierBoundaries: extCfg.tierBoundaries,
     };
+  }
+
+  // Override confidence parameters
+  if (extCfg.confidenceThreshold !== undefined) {
+    config.scoring = {
+      ...config.scoring,
+      confidenceThreshold: extCfg.confidenceThreshold,
+    };
+  }
+  if (extCfg.confidenceSteepness !== undefined) {
+    config.scoring = {
+      ...config.scoring,
+      confidenceSteepness: extCfg.confidenceSteepness,
+    };
+  }
+
+  // Pass through Laya classifier config
+  if (extCfg.classifier) {
+    config.classifier = extCfg.classifier;
   }
 
   return config;
