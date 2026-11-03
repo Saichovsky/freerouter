@@ -120,6 +120,53 @@ function extractPromptForClassification(messages: ChatRequest["messages"]): {
   return { prompt, systemPrompt };
 }
 
+/**
+ * Get the text content of a message (string content or concatenated text blocks).
+ */
+function getMessageText(msg: ChatRequest["messages"][number]): string {
+  return typeof msg.content === "string"
+    ? msg.content
+    : (msg.content ?? []).filter(b => b.type === "text").map(b => b.text ?? "").join("\n");
+}
+
+/**
+ * Find the last user message so mode overrides apply to the latest prompt,
+ * not to the whole conversation context.
+ */
+function findLastUserMessage(messages: ChatRequest["messages"]): { index: number; text: string } | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "user") {
+      return { index: i, text: getMessageText(messages[i]) };
+    }
+  }
+  return null;
+}
+
+/**
+ * Remove the mode directive from a message before it is forwarded,
+ * preserving non-text content blocks.
+ */
+function stripModeDirective(
+  msg: ChatRequest["messages"][number],
+  cleanedText: string,
+): ChatRequest["messages"][number] {
+  if (typeof msg.content === "string") {
+    return { ...msg, content: cleanedText };
+  }
+  if (Array.isArray(msg.content)) {
+    const blocks = [...msg.content];
+    const firstText = blocks.findIndex(b => b.type === "text");
+    if (firstText !== -1) {
+      const override = detectModeOverride(blocks[firstText].text ?? "");
+      if (override) {
+        blocks[firstText] = { ...blocks[firstText], text: override.cleanedPrompt };
+      }
+    }
+    return { ...msg, content: blocks };
+  }
+  return msg;
+}
+
 
 /**
  * Detect user-requested mode override in prompt text.
@@ -206,6 +253,7 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse) 
 
   // Extract prompt for classification
   const { prompt, systemPrompt } = extractPromptForClassification(chatReq.messages);
+  const lastUserMessage = findLastUserMessage(chatReq.messages);
 
   if (!prompt) {
     recordError("bad_request");
@@ -222,9 +270,17 @@ async function handleChatCompletions(req: IncomingMessage, res: ServerResponse) 
 
   if (requestedModel === "auto" || requestedModel === "clawrouter/auto" || requestedModel === "blockrun/auto") {
     // Check for user mode override (e.g., "max mode: ...", "/complex ...", "[reasoning] ...")
-    const modeOverride = detectModeOverride(prompt);
+    // Check the last user message, not the combined context, so multi-turn
+    // requests can still force a tier.
+    const modeOverride = lastUserMessage ? detectModeOverride(lastUserMessage.text) : null;
     
-    if (modeOverride) {
+    if (modeOverride && lastUserMessage) {
+      // Strip the directive before forwarding so the model never sees it.
+      chatReq.messages[lastUserMessage.index] = stripModeDirective(
+        chatReq.messages[lastUserMessage.index],
+        modeOverride.cleanedPrompt,
+      );
+
       // User explicitly requested a tier — honor it
       const routingCfg = getRoutingConfig();
       const tierConfig = routingCfg.tiers[modeOverride.tier as keyof typeof routingCfg.tiers];
