@@ -56,30 +56,35 @@
   "apiKeys": {},
   "tiers": {
     "SIMPLE": {
-      "primary": "poolside/poolside/laguna-xs-2.1",
+      "primary": "groq/openai/gpt-oss-20b",
       "fallback": [
-        "poolside/poolside/laguna-s-2.1",
-        "groq/llama-3.3-70b-versatile"
+        "poolside/poolside/laguna-xs-2.1",
+        "openrouter/cohere/north-mini-code:free",
+        "groq/qwen/qwen3.8-27b"
       ]
     },
     "MEDIUM": {
       "primary": "poolside/poolside/laguna-s-2.1",
       "fallback": [
-        "groq/openai/gpt-oss-20b"
+        "groq/openai/gpt-oss-120b",
+        "openrouter/recursive/flint-v1.0:free",
+        "zai/glm-4.7-flash"
       ]
     },
     "COMPLEX": {
       "primary": "groq/openai/gpt-oss-120b",
       "fallback": [
-        "poolside/poolside/laguna-s-2.1",
-        "groq/llama-3.3-70b-versatile"
+        "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+        "openrouter/nvidia/nemotron-3.5-super-vl:free",
+        "zai/glm-5.1"
       ]
     },
     "REASONING": {
-      "primary": "groq/openai/gpt-oss-120b",
+      "primary": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
       "fallback": [
-        "poolside/poolside/laguna-s-2.1",
-        "openrouter/nvidia/nemotron-3-super-120b-a12b:free"
+        "groq/openai/gpt-oss-120b",
+        "openrouter/nvidia/nemotron-3.5-super-vl:free",
+        "zai/glm-5.3-flash"
       ]
     }
   },
@@ -87,28 +92,33 @@
     "SIMPLE": {
       "primary": "poolside/poolside/laguna-xs-2.1",
       "fallback": [
-        "poolside/poolside/laguna-s-2.1",
-        "groq/llama-3.3-70b-versatile"
+        "groq/openai/gpt-oss-20b",
+        "openrouter/cohere/north-mini-code:free",
+        "groq/qwen/qwen3.8-27b"
       ]
     },
     "MEDIUM": {
       "primary": "poolside/poolside/laguna-s-2.1",
       "fallback": [
-        "groq/openai/gpt-oss-20b"
+        "openrouter/recursive/flint-v1.0:free",
+        "groq/openai/gpt-oss-120b",
+        "zai/glm-4.7-flash"
       ]
     },
     "COMPLEX": {
       "primary": "groq/openai/gpt-oss-120b",
       "fallback": [
-        "poolside/poolside/laguna-s-2.1",
-        "groq/llama-3.3-70b-versatile"
+        "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
+        "openrouter/nvidia/nemotron-3.5-super-vl:free",
+        "zai/glm-5.1"
       ]
     },
     "REASONING": {
-      "primary": "groq/openai/gpt-oss-120b",
+      "primary": "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free",
       "fallback": [
-        "poolside/poolside/laguna-s-2.1",
-        "openrouter/nvidia/nemotron-3-super-120b-a12b:free"
+        "groq/openai/gpt-oss-120b",
+        "openrouter/nvidia/nemotron-3.5-super-vl:free",
+        "zai/glm-5.3-flash"
       ]
     }
   },
@@ -120,8 +130,25 @@
   "confidenceThreshold": 0.75,
   "confidenceSteepness": 8,
   "thinking": {
-    "adaptive": ["nemotron-3-super-120b-a12b:free", "laguna-s-2.1"],
-    "enabled": { "models": ["gpt-oss-20b", "gpt-oss-120b"], "budget": 4096 }
+    "adaptive": [
+      "nemotron-3-ultra-550b-a55b:free",
+      "nemotron-3.5-super-vl:free",
+      "laguna-s-2.1",
+      "glm-5.1",
+      "glm-5.3-flash"
+    ],
+    "enabled": {
+      "models": [
+        "gpt-oss-20b",
+        "gpt-oss-120b",
+        "qwen3.8-27b",
+        "laguna-xs-2.1",
+        "north-mini-code:free",
+        "flint-v1.0:free",
+        "glm-4.7-flash"
+      ],
+      "budget": 4096
+    }
   },
   "classifier": {
     "baseUrl": "http://192.168.10.8:8081",
